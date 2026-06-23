@@ -3,8 +3,12 @@
     "type": "name",
     "value": "Git Ast"
   },
+  "tagline": {
+    "type": "tagline",
+    "value": "Git AST provides language-aware extensions for Git, leveraging Abstract Syntax Trees (ASTs) instead of traditional li…"
+  },
   "description": {
     "type": "meta",
-    "value": "Git AST provides language-aware extensions for Git, leveraging Abstract Syntax Trees (ASTs) instead of traditional line-based diffs. This enhances Git with semantic understanding, leading to more meaningful history, easier merges, and enhanced code consistency."
+    "value": "Git AST provides language-aware extensions for Git, leveraging Abstract Syntax Trees (ASTs) instead of traditional line-based diffs.  This enhances Git with semantic understanding, leading to more meaningful history, easier merges, and enhanced code consistency."
   }
 }
