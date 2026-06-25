@@ -48,9 +48,18 @@ For a full documentation overview, see [Documentation Index](./docs/README.md).
 
 ## Project Status
 
-**Current Phase:** Proof of Concept (POC) refinement
+**Design stage — not yet a working tool.** This repository is primarily a design
+worked out in [`docs/`](./docs/README.md), plus a small Rust skeleton that
+compiles and exposes the subcommand surface (`git-ast filter-process |
+diff-driver | merge-driver`). The filter, diff, and merge logic are
+**placeholders**: parsing, serialization, and pretty-printing are not implemented
+yet. The hardest open problem — stable AST node identity across versions, which
+structural diff/merge and refactor-aware history depend on — is described in
+[`docs/planning/scope.md`](./docs/planning/scope.md) and explicitly out of scope
+for the initial MVP.
 
-This project is under active development. The current focus is on refining the architecture to use Git's clean/smudge filters for seamless integration, leveraging Tree-sitter to parse source files into structured representations.
+If you are evaluating this repo: the value here is the architecture and the
+problem framing, not a runnable extension.
 
 ## License
 
