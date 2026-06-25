@@ -24,7 +24,11 @@ pub fn run_diff_driver(args: &[String]) -> Result<(), Error> {
     let (path, old_file, new_file) = (&args[0], &args[1], &args[4]);
     eprintln!("[diff] {path}: {old_file} -> {new_file} (placeholder: text diff)");
 
-    let output = Command::new("diff").arg("-u").arg(old_file).arg(new_file).output()?;
+    let output = Command::new("diff")
+        .arg("-u")
+        .arg(old_file)
+        .arg(new_file)
+        .output()?;
     std::io::stdout().write_all(&output.stdout)?;
 
     // `diff` exits 0 when identical and 1 when differing; both are success here.
@@ -64,5 +68,7 @@ pub fn run_merge_driver(args: &[String]) -> Result<(), Error> {
     merged.extend_from_slice(b"\n>>>>>>> OTHER\n");
     std::fs::write(current_path, merged)?;
 
-    Err(Error::Driver("merge left unresolved conflicts (placeholder)".to_string()))
+    Err(Error::Driver(
+        "merge left unresolved conflicts (placeholder)".to_string(),
+    ))
 }
