@@ -74,6 +74,40 @@ Honest boundaries:
   rename. That problem is described in
   [`docs/planning/scope.md`](./docs/planning/scope.md) and remains out of scope.
 
+## On stable node identity (the hard part)
+
+"Node identity across versions" means being able to say *this* function in
+commit N is the same entity as *that* one in commit N+1 — through a move, a
+rename, an extract-method — so attribution follows the node, not its line
+position. It is what canonical formatting alone does **not** buy you, and it is
+the floor under reliable per-line attribution. A few things worth stating
+plainly, because they are easy to get wrong:
+
+- **It is heuristic, not exact.** "Is this the same function after a rename
+  *and* a body rewrite?" has no ground truth — it is a judgment. You can get it
+  very good (a pure move, or a rename with an unchanged body, is near-certain);
+  you cannot get it provably correct.
+
+- **Identity is *computed*, not *stored*.** Embedding durable IDs in nodes fails
+  the moment a plain text editor touches the file (the IDs aren't there to
+  preserve). Because git-ast stores canonical *text*, identity must be derived
+  by matching tree N against tree N+1 (GumTree-family algorithms) at the time
+  you ask — not carried in the blob.
+
+- **Content-addressed subtree hashing is the lever.** Hash every subtree; an
+  unchanged-but-moved node has the *same hash* in both commits and matches for
+  free, with zero heuristics. Fuzzy matching is then needed only for the
+  subtrees that actually changed — shrinking the uncertain surface to just the
+  genuinely-edited nodes.
+
+- **`git notes` are a transport, not the mechanism.** Computing identity needs
+  no notes. Notes only matter for *persisting* attribution and carrying it
+  across history rewrites — and they do **not** survive rewrites for free: they
+  are keyed to commit SHAs, `rebase`/`amend`/cherry-pick copying is per-commit
+  and not merge-aware, and **squash collapses several commits' notes
+  ambiguously**. Making attribution "move and merge through every rewrite" is
+  the hard engineering, not a property notes hand you.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
