@@ -48,18 +48,31 @@ For a full documentation overview, see [Documentation Index](./docs/README.md).
 
 ## Project Status
 
-**Design stage — not yet a working tool.** This repository is primarily a design
-worked out in [`docs/`](./docs/README.md), plus a small Rust skeleton that
-compiles and exposes the subcommand surface (`git-ast filter-process |
-diff-driver | merge-driver`). The filter, diff, and merge logic are
-**placeholders**: parsing, serialization, and pretty-printing are not implemented
-yet. The hardest open problem — stable AST node identity across versions, which
-structural diff/merge and refactor-aware history depend on — is described in
-[`docs/planning/scope.md`](./docs/planning/scope.md) and explicitly out of scope
-for the initial MVP.
+**Working clean/smudge round-trip for a Rust subset.** The core pipeline is
+implemented and runs through real Git:
 
-If you are evaluating this repo: the value here is the architecture and the
-problem framing, not a runnable extension.
+- `git-ast setup` registers the filter in a repository.
+- On `git add`, the `clean` filter parses Rust with Tree-sitter and stores its
+  **canonical** form; on `git checkout`, `smudge` returns it. Reformatting
+  therefore never reaches history — two differently-formatted inputs that parse
+  to the same tree produce byte-identical blobs.
+- It speaks Git's real `filter-process` pkt-line protocol, so `git add` /
+  `git checkout` / `git diff` all work end to end. See
+  [`examples/demo.sh`](./examples/demo.sh).
+
+Honest boundaries:
+
+- **One language, a subset of it.** The pretty-printer covers the constructs in
+  the example (functions, params, blocks, `let`, binary/call/macro expressions,
+  literals, comments). It is **fail-closed**: syntax errors reject the commit,
+  and any unsupported construct returns an error rather than corrupting code.
+  Widening coverage is additive — one more arm per node kind.
+- **Diff and merge drivers are still placeholders.** Making those *structural*
+  depends on the hardest open problem — **stable AST node identity across
+  versions** — which this does **not** solve. Canonical formatting removes
+  formatting churn from history; it does not yet track a node through a move or
+  rename. That problem is described in
+  [`docs/planning/scope.md`](./docs/planning/scope.md) and remains out of scope.
 
 ## License
 

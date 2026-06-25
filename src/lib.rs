@@ -7,12 +7,14 @@
 //!
 //! ## Status
 //!
-//! **Design-stage skeleton.** This crate currently exposes the *shape* of the
-//! integration — a subcommand entry point plus placeholder filter/diff/merge
-//! logic — so the wiring compiles and can be exercised end to end. The actual
-//! parsing, serialization and pretty-printing are not implemented yet; the
-//! relevant functions are clearly marked as placeholders. See the `docs/`
-//! directory for the design and roadmap.
+//! **Working clean/smudge round-trip for a Rust subset.** The `clean` filter
+//! parses Rust with Tree-sitter and re-emits canonical source ([`printer`]),
+//! driven over Git's real `filter-process` pkt-line protocol ([`pktline`],
+//! [`filters`]) — so `git add`/`git checkout` normalize formatting end to end.
+//! The printer covers a documented subset and is fail-closed outside it. The
+//! diff and merge drivers ([`drivers`]) remain placeholders: making those
+//! structural depends on stable node identity, which is out of scope (see
+//! `docs/planning/scope.md`).
 //!
 //! ## Integration points
 //!
@@ -27,6 +29,9 @@
 pub mod config;
 pub mod drivers;
 pub mod filters;
+pub mod pktline;
+pub mod printer;
+pub mod setup;
 
 use std::fmt;
 
