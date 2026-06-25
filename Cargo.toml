@@ -2,12 +2,11 @@
 name = "git-ast"
 version = "0.1.0"
 edition = "2021"
+description = "Language-aware Git: AST-based diffs and merges instead of line-based (design-stage)."
+license = "MIT"
+repository = "https://github.com/bounded-systems/git-ast"
 
+# No dependencies yet. The design uses Tree-sitter for parsing and libgit2
+# (git2) for plumbing; those are added when the corresponding logic lands,
+# rather than declared while unused.
 [dependencies]
-git2 = "0.18.3"
-libc = "0.2"
-tree-sitter = "0.25.3"
-tree-sitter-rust = "0.21.0"
-
-[dev-dependencies]
-tempfile = "3.10.1"
