@@ -62,6 +62,9 @@ implemented and runs through real Git:
 - It speaks Git's real `filter-process` pkt-line protocol, so `git add` /
   `git checkout` / `git diff` all work end to end. See
   [`examples/demo.sh`](./examples/demo.sh).
+- `git-ast inspect [FILE]` lists top-level definitions with a
+  **formatting-invariant content hash** — a proof-of-concept of the first
+  read verb (see "The interface: verbs" below).
 
 Honest boundaries:
 
@@ -344,6 +347,34 @@ with the canonical text in git:
 That last distinction is the whole reason a model store exists: git stores what
 is reparseable; the model store stores what is not.
 
+### The interface: verbs (verbspec)
+
+The AST surface is naturally a set of **verbs** — operations with a typed input
+and output:
+
+- **Read verbs — look at the AST, and at history on the AST.** `inspect` / `find`
+  / `refs` (query a snapshot) and `blame` / `log` / `trace` (per-node history).
+  The history verbs are the per-line-attribution goal re-expressed on nodes, and
+  run over the model store. The query side is achievable first.
+- **Write verbs — mutate the AST to generate or refactor.** `rename` / `extract`
+  / `inline` / `move` / `generate`. Mutating the tree directly makes each edit a
+  *typed operation*, which is stage-1 provenance capture — identity by
+  construction, the "record, don't reconstruct" thesis made operational. These
+  depend on the resolver (a safe `rename` must update every reference), so they
+  sequence after identity.
+
+[**verbspec**](https://github.com/bounded-systems/verbspec) is the delivery
+vehicle: a spec-driven framework where you *author a verb once and project it
+everywhere* — CLI, MCP, Anthropic tools — from one schema. Authoring the AST
+verbs as verbspec verbs is exactly how an **agent** gets AST query / history /
+mutation as first-class tools, which is what puts the agent at stage 1 of the
+provenance pipeline.
+
+A first read verb ships today: [`git-ast inspect`](./src/printer.rs) lists
+top-level definitions with a content hash that is invariant under formatting
+(`inspect`, shaped as a verb with `input: { source }`, `output: Def[]`). It is a
+proof-of-concept of the read surface — history and write verbs are future work.
+
 ## Related projects
 
 - **[frond](https://github.com/bounded-systems/frond)** — the JS/TS counterpart.
@@ -353,6 +384,11 @@ is reparseable; the model store stores what is not.
   round-trip *fidelity* check — proving a printer can reproduce source faithfully
   — which is exactly the prerequisite git-ast's canonical printer depends on, so
   the two projects validate the same idea across two toolchains.
+- **[verbspec](https://github.com/bounded-systems/verbspec)** — a spec-driven CLI
+  framework: author a verb once (a typed schema with input/output/run) and
+  project it to CLI, MCP, and Anthropic tools. The intended surface for git-ast's
+  AST read/write verbs, so the same operations reach humans, agents, and CI from
+  one definition. See "The interface: verbs" above.
 
 ## License
 

@@ -49,6 +49,17 @@ const INDENT: &str = "    ";
 /// [`Error::Generation`] if it parses but contains a construct outside the
 /// supported subset.
 pub fn canonicalize(source: &[u8]) -> Result<Vec<u8>, Error> {
+    let tree = parse(source)?;
+    let mut printer = Printer {
+        src: source,
+        out: String::new(),
+    };
+    printer.source_file(tree.root_node())?;
+    Ok(printer.out.into_bytes())
+}
+
+/// Parse `source` as Rust, rejecting anything that does not parse cleanly.
+fn parse(source: &[u8]) -> Result<tree_sitter::Tree, Error> {
     let mut parser = Parser::new();
     parser
         .set_language(&tree_sitter_rust::language())
@@ -56,19 +67,76 @@ pub fn canonicalize(source: &[u8]) -> Result<Vec<u8>, Error> {
     let tree = parser
         .parse(source, None)
         .ok_or_else(|| Error::Parsing("parser returned no tree".to_string()))?;
-    let root = tree.root_node();
-    if root.has_error() {
+    if tree.root_node().has_error() {
         return Err(Error::Parsing(
             "source has syntax errors; fix them or bypass the filter".to_string(),
         ));
     }
+    Ok(tree)
+}
 
-    let mut printer = Printer {
-        src: source,
-        out: String::new(),
-    };
-    printer.source_file(root)?;
-    Ok(printer.out.into_bytes())
+/// A top-level definition surfaced by the [`inspect`] read verb.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Def {
+    /// Kind of definition (currently always `"fn"`).
+    pub kind: &'static str,
+    /// The declared name.
+    pub name: String,
+    /// Content identity: a deterministic hash of the node's *canonical* form,
+    /// so it is **stable across reformatting**. Note this hash couples name and
+    /// body — separating the pure-content axis (alpha-normalizing the name) is
+    /// the refinement described under "Identity is a vector" in the README.
+    pub content_hash: String,
+}
+
+/// The first **verbspec read verb** — "look at the AST."
+///
+/// Conceptually a verb with `input: { source }` and `output: Def[]`: it parses
+/// Rust and lists the top-level definitions, each tagged with a content hash
+/// that is invariant under formatting. This is a small proof-of-concept of the
+/// read surface (query the AST); history verbs (per-node blame) need the model
+/// store. Definitions whose bodies fall outside the supported subset are
+/// skipped rather than failing the whole listing.
+pub fn inspect(source: &[u8]) -> Result<Vec<Def>, Error> {
+    let tree = parse(source)?;
+    let root = tree.root_node();
+    let mut defs = Vec::new();
+    let mut cursor = root.walk();
+    for item in root.named_children(&mut cursor) {
+        if item.kind() != "function_item" {
+            continue;
+        }
+        let mut printer = Printer {
+            src: source,
+            out: String::new(),
+        };
+        if printer.function(item, 0).is_err() {
+            continue; // can't hash what we can't canonicalize
+        }
+        let name = item
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .unwrap_or("?")
+            .to_string();
+        defs.push(Def {
+            kind: "fn",
+            name,
+            content_hash: fnv1a_hex(printer.out.as_bytes()),
+        });
+    }
+    Ok(defs)
+}
+
+/// Dependency-free, deterministic 64-bit FNV-1a hash, rendered as hex. Adequate
+/// for a content-identity proof-of-concept; a real model store would use a
+/// cryptographic hash.
+fn fnv1a_hex(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 struct Printer<'a> {
@@ -377,6 +445,25 @@ mod tests {
             let twice = canonicalize(&once).unwrap();
             assert_eq!(once, twice, "not idempotent for: {input:?}");
         }
+    }
+
+    #[test]
+    fn inspect_content_hash_is_stable_across_formatting() {
+        // The read verb's headline: a definition's content identity survives
+        // reformatting (the hash is over canonical form).
+        let messy = canonicalize(b"fn add(a:i32,b:i32)->i32{a+b}").unwrap();
+        let tidy = inspect(b"fn add( a : i32 , b : i32 ) -> i32 {\n\n    a + b\n}\n").unwrap();
+        let from_messy = inspect(&messy).unwrap();
+        assert_eq!(from_messy, tidy);
+        assert_eq!(from_messy.len(), 1);
+        assert_eq!(from_messy[0].name, "add");
+    }
+
+    #[test]
+    fn inspect_distinguishes_bodies_and_lists_in_order() {
+        let defs = inspect(b"fn a()->i32{1+2}\nfn b()->i32{1-2}").unwrap();
+        assert_eq!(defs.iter().map(|d| &d.name).collect::<Vec<_>>(), ["a", "b"]);
+        assert_ne!(defs[0].content_hash, defs[1].content_hash);
     }
 
     #[test]
