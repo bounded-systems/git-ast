@@ -1,11 +1,13 @@
 //! `git-ast` command-line entry point.
 //!
-//! Dispatches the Git integration subcommands. The subcommands themselves are
-//! placeholders — see the crate docs and `docs/` for the design.
+//! Dispatches the Git integration subcommands. `setup` and `filter-process`
+//! implement the working clean/smudge round-trip; `diff-driver`/`merge-driver`
+//! remain placeholders (they await stable node identity — see `docs/`).
 
+use std::io::Read;
 use std::process::ExitCode;
 
-use git_ast::{drivers, filters};
+use git_ast::{drivers, filters, printer, setup, Error};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -15,6 +17,8 @@ fn main() -> ExitCode {
     };
 
     let result = match cmd.as_str() {
+        "setup" => setup::run().map(|()| 0u8),
+        "inspect" => run_inspect(rest),
         "filter-process" => filters::run_long_running_filter().map(|()| 0u8),
         "diff-driver" => drivers::run_diff_driver(rest).map(|()| 0u8),
         "merge-driver" => drivers::run_merge_driver(rest).map(|()| 0u8),
@@ -42,21 +46,41 @@ fn main() -> ExitCode {
     }
 }
 
+/// The `inspect` read verb: list top-level definitions with a
+/// formatting-invariant content hash. Reads a file argument, or stdin.
+fn run_inspect(args: &[String]) -> Result<u8, Error> {
+    let source = match args.first() {
+        Some(path) => std::fs::read(path)?,
+        None => {
+            let mut buf = Vec::new();
+            std::io::stdin().read_to_end(&mut buf)?;
+            buf
+        }
+    };
+    for def in printer::inspect(&source)? {
+        println!("{} {} {}", def.kind, def.name, def.content_hash);
+    }
+    Ok(0)
+}
+
 fn print_help() {
     eprintln!(
-        "git-ast — language-aware Git (design-stage skeleton)\n\
+        "git-ast — language-aware Git\n\
          \n\
          USAGE:\n    \
          git-ast <SUBCOMMAND>\n\
          \n\
          SUBCOMMANDS:\n    \
-         filter-process    Clean/smudge long-running filter (placeholder)\n    \
+         setup             Enable the *.rs clean/smudge filter in this repo\n    \
+         inspect [FILE]    List top-level defs with a formatting-invariant hash\n    \
+         filter-process    Clean/smudge long-running filter (canonicalizes Rust)\n    \
          diff-driver       Git diff driver (placeholder)\n    \
          merge-driver      Git merge driver (placeholder)\n    \
          --version, -V     Print version\n    \
          --help, -h        Print this help\n\
          \n\
-         NOTE: subcommands are placeholders; parsing/printing are not implemented yet.\n\
-         See docs/ for the design."
+         The clean/smudge round-trip works for a documented Rust subset and is\n\
+         fail-closed outside it. Structural diff/merge await stable node identity;\n\
+         see docs/ for the design and scope."
     );
 }

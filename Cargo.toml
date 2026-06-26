@@ -6,7 +6,21 @@ description = "Language-aware Git: AST-based diffs and merges instead of line-ba
 license = "MIT"
 repository = "https://github.com/bounded-systems/git-ast"
 
-# No dependencies yet. The design uses Tree-sitter for parsing and libgit2
-# (git2) for plumbing; those are added when the corresponding logic lands,
-# rather than declared while unused.
+# Tree-sitter parses source into a concrete syntax tree; the `printer` module
+# walks that tree and re-emits canonical source. No libgit2 needed: the
+# clean/smudge filter speaks Git's pkt-line `filter-process` protocol over
+# stdin/stdout, implemented in `pktline`.
 [dependencies]
+tree-sitter = "0.22"
+tree-sitter-rust = "0.21"
+
+# The Gherkin suite (tests/features/*.feature) executes the README's claims
+# against real `git`, driving the built binary as the clean/smudge filter.
+[dev-dependencies]
+cucumber = "0.21"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+
+[[test]]
+name = "claims"
+harness = false
