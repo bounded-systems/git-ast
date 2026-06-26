@@ -108,6 +108,84 @@ plainly, because they are easy to get wrong:
   ambiguously**. Making attribution "move and merge through every rewrite" is
   the hard engineering, not a property notes hand you.
 
+### Identity is a vector, not a scalar
+
+"Is this the same node?" is underdetermined because identity is not one
+property but several **independent dimensions** that come apart under different
+edits. This is not new: Google [Kythe](https://kythe.io/docs/kythe-storage.html)
+models every semantic node as a `VName` — a 5-tuple `(signature, corpus, root,
+path, language)` — and states outright that "a node is a d-dimensional vector,
+each dimension a scalar fact." Treat node identity the same way: a tuple,
+resolved per purpose, not a single key. Stated precisely, splitting each
+dimension that is not atomic:
+
+- **Content — shallow vs deep.** *Shallow* content is the node's own normalized
+  structure with identifiers alpha-renamed and dependencies abstracted; *deep*
+  (Merkle) content folds dependency identities into the hash. They have
+  *opposite* stability under change propagation: rename a callee `g` and `f`'s
+  shallow content is unchanged while its deep content changes (the Unison
+  behaviour — deps by hash). Collapsing the two is a category error — shallow is
+  stable but coarse, deep is precise but ripples on any transitive edit.
+- **Name — lexeme vs binding.** The surface string (`parseConfig`) versus the
+  resolved declaration a use points to (a compiler `DefId`). A rename changes
+  the lexeme; the binding persists, and shadowing gives same-lexeme /
+  different-binding. Most rename-robustness comes from binding identity, not the
+  string — which is why Kythe keys on `signature`, not the name.
+- **Definition vs use/call.** A definition and its call sites are *separate*
+  dimensions: the def can be stable while callers churn, or the reverse.
+  "Track the def" and "track who references the def" are different identities
+  with different lifetimes ([SCIP/LSIF](https://github.com/sourcegraph/scip)
+  monikers separate them). This is also why the **export surface** is special:
+  at an API boundary use-identity becomes a *contract* — semver and
+  breaking-change detection key on it — so the otherwise-weak use axis becomes
+  the durable one.
+- **Location.** Path, offset, sibling order. Weakest (breaks on every move),
+  most available (it is what text and git already have). Mostly a tiebreaker.
+
+Two things the single word "identity" hides:
+
+- **Dimensions differ in epistemic cost, not just in what they track.** Content
+  and Location are computable from text alone; Name(binding) and use/call need a
+  resolver or whole-program analysis. In a no-build, partial-file, or
+  multi-language context, half the vector does not exist — *availability*, not
+  preference, decides which dimensions you can use.
+- **Equivalence is not persistence.** Content identity is *many-to-one*: two
+  distinct helpers with identical bodies share a content hash. Key blame on
+  content and you *fuse clones* into one false lineage. Content gives
+  equivalence classes; "the same entity over time" is a different relation
+  (correspondence between two versions, then persistence across N).
+
+### Three ways to establish it — and only one scales
+
+Given the vector, how do you decide two nodes correspond across versions? Three
+families, not equal:
+
+1. **By construction** — assign a durable id at birth and have the editor carry
+   it. Kleppmann's [replicated-tree CRDT](https://martin.kleppmann.com/2021/10/07/crdt-tree-move-operation.html)
+   gives each node a `TreeId` that survives arbitrary concurrent moves (formally
+   verified); Unison's content hash is a static-language variant. Identity is
+   *recorded, never inferred*.
+2. **By operation** — recognize the *edit*.
+   [RefactoringMiner](https://users.encs.concordia.ca/~nikolaos/publications/TSE_2020.pdf)
+   detects 100+ refactoring types at ~99.9% precision by applying AST
+   replacements until statements match (extract/inline resolved via call-site
+   context); [CodeShovel](https://www.ncbradley.com/publication/codeshovel/)
+   builds method histories through rename/move/signature changes — and tellingly
+   *struggles only when a body changes substantially during a move*, the exact
+   point where snapshot similarity runs out and only recorded provenance helps.
+3. **By snapshot matching** — compare the vector across two anonymous versions
+   (GumTree-family). This is the **fallback** for when you failed to capture the
+   first two.
+
+The thesis: **record the edit, don't reconstruct it.** Snapshot matching is the
+degraded mode; the identity vector above is what you fall back to when identity
+was not recorded at write time. For an **agent-authored** codebase this flips
+the problem — the agent *is* the editor, so it can emit the operation (rename,
+extract, move) as first-class provenance, making identity durable by
+construction. The strongest per-line attribution is not better post-hoc
+matching; it is capturing edit-intent at the moment of the edit so matching is
+never needed.
+
 ### Prior art: Unison
 
 [Unison](https://www.unison-lang.org/) is the existence proof that this model
