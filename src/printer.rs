@@ -15,6 +15,28 @@
 //! guessing, so the filter can never silently corrupt code it cannot represent.
 //! Widening the subset is additive — each new node kind is one more arm in
 //! [`Printer::expr`] / [`Printer::stmt`].
+//!
+//! ## Determinism contract
+//!
+//! [`canonicalize`] is a pure function of the parse tree, and the whole design
+//! depends on it:
+//!
+//! - **Convergent** — any two formattings of the same program produce identical
+//!   bytes (so reformatting never reaches history).
+//! - **Idempotent** — `canonicalize(canonicalize(x)) == canonicalize(x)`, which
+//!   is what lets `smudge` be the identity and avoids edit/checkout/add churn.
+//! - **No ambient nondeterminism** — no clock, locale, randomness, or float; the
+//!   one `HashMap` in the filter is protocol metadata read by key, never
+//!   iterated into output. Output is always `\n`-terminated UTF-8.
+//! - **Fail-closed, not partial** — syntax errors are rejected up front, so
+//!   Tree-sitter's error recovery never yields a nondeterministic partial parse.
+//!
+//! The canonical form is *defined by* the pair `(tree-sitter-rust grammar
+//! version, this printer)`. Cross-machine reproducibility therefore reduces to
+//! pinning that pair (what `Cargo.lock` does). Upgrading either is a deliberate
+//! one-time re-canonicalization, not silent per-user drift — the same discipline
+//! teams apply to pinning a formatter version. These properties are guarded by
+//! the `convergence_*`, `idempotent_*`, and `pure_repeated_calls_*` tests below.
 
 use crate::Error;
 use tree_sitter::{Node, Parser};
@@ -319,5 +341,51 @@ mod tests {
         // `struct` is outside the documented subset: error, never silent loss.
         let err = canonicalize(b"struct S { x: i32 }\n").unwrap_err();
         assert!(matches!(err, Error::Generation(_)));
+    }
+
+    // --- Determinism contract (see the module-level "Determinism" docs) ---
+
+    #[test]
+    fn convergence_many_formattings_one_program() {
+        // Every formatting of the same program must canonicalize to identical
+        // bytes — the property that keeps reformatting out of history.
+        let variants: &[&[u8]] = &[
+            b"fn add(a:i32,b:i32)->i32{a+b}",
+            b"fn add( a : i32 , b : i32 ) -> i32 { a + b }",
+            b"fn   add(a: i32,b: i32)->i32{\n\n    a  +  b\n\n}\n",
+            b"fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n",
+        ];
+        let canon = canonicalize(variants[0]).unwrap();
+        for v in variants {
+            assert_eq!(canonicalize(v).unwrap(), canon, "variant diverged: {v:?}");
+        }
+    }
+
+    #[test]
+    fn idempotent_on_varied_inputs() {
+        // canonicalize is a fixed point on its own output: clean(clean(x)) ==
+        // clean(x). This is what makes `smudge` safe as identity and prevents
+        // edit/checkout/add churn.
+        let inputs: &[&[u8]] = &[
+            b"fn f()->i32{1+2}",
+            b"fn g(a: i32) -> i32 { let x = a; x }",
+            b"fn main(){let s=add(x,y);println!(\"{}\",s);}",
+            b"// leading comment\nfn h() -> i32 { 42 }",
+        ];
+        for input in inputs {
+            let once = canonicalize(input).unwrap();
+            let twice = canonicalize(&once).unwrap();
+            assert_eq!(once, twice, "not idempotent for: {input:?}");
+        }
+    }
+
+    #[test]
+    fn pure_repeated_calls_are_byte_identical() {
+        // No clock/locale/randomness/hash-ordering leaks into the output.
+        let input = b"fn main(){let x=5;let y=10;let s=add(x,y);println!(\"{}\",s);}";
+        let first = canonicalize(input).unwrap();
+        for _ in 0..16 {
+            assert_eq!(canonicalize(input).unwrap(), first);
+        }
     }
 }

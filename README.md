@@ -55,7 +55,10 @@ implemented and runs through real Git:
 - On `git add`, the `clean` filter parses Rust with Tree-sitter and stores its
   **canonical** form; on `git checkout`, `smudge` returns it. Reformatting
   therefore never reaches history — two differently-formatted inputs that parse
-  to the same tree produce byte-identical blobs.
+  to the same tree produce byte-identical blobs. Canonicalization is
+  **deterministic and idempotent** (guarded by property tests; see the
+  "Determinism contract" in [`src/printer.rs`](./src/printer.rs)), with the
+  canonical form versioned by the `(grammar, printer)` pair.
 - It speaks Git's real `filter-process` pkt-line protocol, so `git add` /
   `git checkout` / `git diff` all work end to end. See
   [`examples/demo.sh`](./examples/demo.sh).
@@ -258,6 +261,51 @@ The honest boundaries, so this is an architecture and not a buzzword:
 - **Cell-level conflicts, not zero conflicts.** Two edits to the same node still
   conflict; Dolt just gives a node/cell conflict instead of a line one — strictly
   better, not magic.
+
+### A provenance pipeline (grounding each form of identity)
+
+Tie the pieces into one dataflow, edit → history, and the "record, don't
+reconstruct" thesis becomes concrete. Each stage *captures* a form of identity;
+the value of the project is moving capture as early (left) as possible, because
+everything you fail to capture you must reconstruct heuristically later.
+
+1. **Capture** — the edit's *intent*. An LSP `rename`, an IDE refactor action,
+   or an **agent's own edit** is a *typed operation* (rename / extract / move),
+   not an anonymous text delta. This is where operation-identity is born; today
+   git-ast captures none of it (it sees only the result at `git add`).
+2. **Canonicalize** — parse to a deterministic tree and emit canonical bytes.
+   This yields *shallow content* identity and a reproducible structure. **git-ast
+   does this today.**
+3. **Resolve & identify** — run a name resolver (`DefId`-style) and build the
+   reference graph; assign stable node ids (content hash à la Unison, or a
+   CRDT-style `TreeId`). This populates the rest of the identity vector:
+   *binding*, *deep/Merkle content*, *def-vs-use*.
+4. **Attribute** — record per-node provenance keyed to the id: author, time, and
+   **who/what** produced it (human vs. which agent/model), ideally signed.
+5. **Project & preserve** — render canonical text back out (**git-ast does this**)
+   and carry identity + attribution through rebase / squash / cherry-pick / merge.
+
+Grounding the identity forms in *what we have vs. what else there is*:
+
+| Identity form | Pipeline stage | Have today | What's needed | Prior art |
+|---|---|---|---|---|
+| Content (shallow) | 2 Canonicalize | ✅ deterministic canonical bytes | expose subtree hashes | Merkle, Unison |
+| Content (deep/Merkle) | 3 Resolve | — | dependency-resolved hash | Unison |
+| Name — lexeme | 2 Canonicalize | ✅ present in the text | — | — |
+| Name — binding | 3 Resolve | — | a resolver (`DefId`) | Kythe `signature`, LSP |
+| Location | 2 Canonicalize | ✅ path / offset | — | git |
+| Def vs use/call | 3 Resolve | — | reference graph | [SCIP/LSIF](https://github.com/sourcegraph/scip), Kythe |
+| Operation / provenance | 1 Capture | — | editor / agent / LSP op log | RefactoringMiner, [CRDT](https://martin.kleppmann.com/2021/10/07/crdt-tree-move-operation.html), [in-toto](https://in-toto.io/) |
+| Authorship (who/what) | 4 Attribute | ✅ commit author at file/line, now reformatting-proof | per-node, human-vs-agent, signed | git blame, [W3C PROV](https://www.w3.org/TR/prov-overview/), [SLSA](https://slsa.dev/)/Sigstore |
+
+Read the table by its columns: **git-ast today owns stages 2 and 5** (the
+deterministic canonicalize/project round-trip) and, as a side effect, makes
+existing line-level blame survive reformatting. The unbuilt, higher-value work
+is stages **1, 3, 4** — capturing the operation, resolving the full identity
+vector, and attaching signed per-node authorship. Reframed for an agent-authored
+codebase: the agent sits at stage 1, so it can *emit* provenance instead of
+leaving it to be recovered — which is exactly the floor reliable per-line
+attribution needs.
 
 ## Related projects
 
