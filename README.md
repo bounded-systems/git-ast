@@ -108,6 +108,31 @@ plainly, because they are easy to get wrong:
   ambiguously**. Making attribution "move and merge through every rewrite" is
   the hard engineering, not a property notes hand you.
 
+### Prior art: Unison
+
+[Unison](https://www.unison-lang.org/) is the existence proof that this model
+works — it makes **identity = the hash of the normalized AST** a language-level
+primitive. Definitions are content-addressed (a Merkle DAG of code, dependencies
+referenced by hash; bound variables normalized so alpha-equivalent terms hash
+the same), and **names are separate metadata** mapping `name → hash`. The payoff
+is exactly the node-identity wishlist, for free: a **rename** is an O(1)
+repoint that never touches the hash, and a **move** isn't an event at all, so
+attribution pinned to a hash survives both with zero heuristics and zero notes.
+
+Two honest caveats keep this from being a finished answer for git-ast:
+
+- **It doesn't dissolve identity *through an edit*.** Changing a body yields a
+  *new* hash — a new entity by construction. Unison records the succession in
+  the namespace history (`foo: hash₁ → hash₂`); "the same thing, changed" lives
+  in the name binding's history, not in a structural claim. That is a clean
+  answer, but the namespace is doing the work, not tree-matching.
+- **Unison is greenfield; git-ast is a retrofit.** Unison gets all of this by
+  being a new language with a custom content-addressed codebase (not text files,
+  not git). git-ast must import the same property into mainstream languages that
+  are name- and position-based, stored in git, which is line/blob-addressed.
+  Unison never had to solve that retrofit — and the retrofit *is* the open
+  problem here.
+
 ## Related projects
 
 - **[frond](https://github.com/bounded-systems/frond)** — the JS/TS counterpart.
