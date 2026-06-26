@@ -1,0 +1,69 @@
+Feature: git-ast canonical clean/smudge round-trip
+  These scenarios are the README's behavioural claims, made executable against
+  real git with the built binary installed as the clean/smudge filter.
+
+  Background:
+    Given a repository with git-ast installed
+
+  Scenario: Reformatting never reaches history
+    When I stage "calc.rs" containing:
+      """
+      fn add(a:i32,b:i32)->i32{a+b}
+      """
+    And I commit
+    And I overwrite "calc.rs" with:
+      """
+      fn add( a : i32 , b : i32 ) -> i32 {
+
+          a + b
+      }
+      """
+    Then "calc.rs" shows no diff
+
+  Scenario: A real change still shows a diff
+    When I stage "calc.rs" containing:
+      """
+      fn add(a:i32,b:i32)->i32{a+b}
+      """
+    And I commit
+    And I overwrite "calc.rs" with:
+      """
+      fn add(a: i32, b: i32) -> i32 {
+          a - b
+      }
+      """
+    Then "calc.rs" shows a diff
+
+  Scenario: Different formattings store byte-identical blobs
+    When I stage "a.rs" containing:
+      """
+      fn add(a:i32,b:i32)->i32{a+b}
+      """
+    And I stage "b.rs" containing:
+      """
+      fn add( a : i32 , b : i32 ) -> i32 {
+          a + b
+      }
+      """
+    Then the stored blobs for "a.rs" and "b.rs" are identical
+
+  Scenario: Round-trip restores canonical source on checkout
+    When I stage "f.rs" containing:
+      """
+      fn f()->i32{1+2}
+      """
+    And I commit
+    And I check out "f.rs" fresh
+    Then the working file "f.rs" is:
+      """
+      fn f() -> i32 {
+          1 + 2
+      }
+      """
+
+  Scenario: Syntax errors are rejected (fail-closed)
+    Then staging "bad.rs" containing "fn main( {" is rejected
+
+  Scenario: Non-Rust files pass through unchanged
+    When I stage "notes.txt" containing "  spaced  text  "
+    Then the stored blob for "notes.txt" is "  spaced  text  "
