@@ -108,6 +108,16 @@ plainly, because they are easy to get wrong:
   ambiguously**. Making attribution "move and merge through every rewrite" is
   the hard engineering, not a property notes hand you.
 
+## Related projects
+
+- **[frond](https://github.com/bounded-systems/frond)** — the JS/TS counterpart.
+  It exercises the same core primitive (parse source to an AST, regenerate it,
+  and compare for fidelity) in the JavaScript/TypeScript ecosystem using **SWC**
+  on **Deno**, where git-ast uses **Tree-sitter** on Rust. frond focuses on the
+  round-trip *fidelity* check — proving a printer can reproduce source faithfully
+  — which is exactly the prerequisite git-ast's canonical printer depends on, so
+  the two projects validate the same idea across two toolchains.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
