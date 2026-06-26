@@ -307,6 +307,43 @@ codebase: the agent sits at stage 1, so it can *emit* provenance instead of
 leaving it to be recovered — which is exactly the floor reliable per-line
 attribution needs.
 
+### Where AST storage hooks in
+
+The natural question is whether the model store is written from the
+`clean`/`smudge` filter. Partly:
+
+- **`clean` is the right place to *parse*** — it already does, to canonicalize —
+  so emitting the content-addressed AST (subtree hashes, the identity vector) is
+  nearly free there and stays pure and deterministic.
+- **`clean`/`smudge` are the wrong place to *write* the model store.** A filter
+  has no commit context — at `clean` time the blob is not committed, so there is
+  no SHA, author, or parent to attribute against or to reconcile the previous
+  AST with. Worse, filters also run during `git diff`, `stash`, `archive`, and
+  checkout, so a write there would record spurious or read-only states and break
+  git's assumption that filters are pure content-in/content-out transforms.
+
+So split responsibilities: **the filter is the codec, commit/ref hooks are the
+recorder.** The stateful model-store writes belong in `post-commit` /
+`post-merge` (record the new AST + attribution against the parent), `post-rewrite`
+(the squash/rebase/amend path — surviving history rewrites), `post-checkout`
+(keep model and projection in lockstep), and server-side `post-receive`
+(authoritative build). In pipeline terms: `clean` = stage 2, the hooks =
+stages 3–4, `smudge` = stage 5.
+
+This also clarifies *what* the model store holds, and why it is not redundant
+with the canonical text in git:
+
+- **git** stores the canonical text — the content of record, and (given the
+  round-trip) the most compressed encoding of it.
+- **the model store (Dolt)** holds the *derived* model, which is two things: a
+  **rebuildable index** (AST structure and subtree hashes — recomputable any
+  time by reparsing the text, so effectively a cache) and the **non-rebuildable
+  provenance** (operation identity, and who/which-agent authored each node) that
+  is *not* a function of the text and therefore must be durably stored.
+
+That last distinction is the whole reason a model store exists: git stores what
+is reparseable; the model store stores what is not.
+
 ## Related projects
 
 - **[frond](https://github.com/bounded-systems/frond)** — the JS/TS counterpart.
