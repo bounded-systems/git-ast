@@ -133,6 +133,54 @@ Two honest caveats keep this from being a finished answer for git-ast:
   Unison never had to solve that retrofit — and the retrofit *is* the open
   problem here.
 
+### Making it possible: a model store + a projection
+
+Unison is the *why*; this is a plausible *how* without inventing a new language.
+Split the system into two versioned stores:
+
+- **The model store** holds the **content-addressed AST** — the source of truth,
+  where node identity lives durably and is *recorded* rather than recomputed.
+- **The projection store** holds the **canonical text** — what humans edit and
+  what GitHub, CI, and ordinary `git` see. It is a *derived view* of the model.
+
+They stay in lockstep via the bidirectional transform: a text edit is parsed and
+folded back into the model as an identity-preserving mutation; a model change is
+re-projected to new canonical text. This is **projectional editing** (cf. MPS,
+Hazel) married to dual version control — and git-ast's existing `clean`/`smudge`
+round-trip is the seed of that transform. The example dir already anticipates
+the split: `04_stored_blob` (the tree) and `05_generated_source` (the
+projection) are exactly these two artifacts, promoted to two histories.
+
+**Use [Dolt](https://www.dolthub.com/) for the model store, not a second git.**
+The AST is structured data, and the model store's real requirements *are* Dolt's
+native features:
+
+- Model the AST as tables (`nodes(id, kind, …)`, `edges(parent, child, field,
+  ordinal)`, attribution columns). A node is a **row keyed by stable id** — that
+  key *is* its identity.
+- Dolt's storage is a prolly tree (a Merkle search tree), so you keep
+  content-addressing and structural sharing **and** get efficient three-way
+  merge at **cell** granularity. Structural AST merge becomes a native database
+  merge instead of an algorithm you write.
+- `dolt blame` / `dolt history` operate on a **row**, so **per-node attribution
+  is a built-in query** — the per-line-attribution goal, at node granularity, as
+  a primitive rather than something reconstructed.
+
+The honest boundaries, so this is an architecture and not a buzzword:
+
+- **Dolt removes the plumbing, not the semantics.** It makes identity cheap to
+  store, version, merge, and blame — but *you still choose the keys*, i.e. define
+  when two nodes are "the same node" (content hash vs. assigned id). That choice
+  is the original hard problem; Dolt does not make it for you.
+- **Two heterogeneous stores** (Dolt model + git projection) means a lockstep
+  invariant between systems with different merge semantics, and the text→AST
+  reconcile heuristic still lives at that boundary — though now it matches an
+  edit against a *known prior tree with known ids*, which is far more tractable
+  than blind tree-diff.
+- **Cell-level conflicts, not zero conflicts.** Two edits to the same node still
+  conflict; Dolt just gives a node/cell conflict instead of a line one — strictly
+  better, not magic.
+
 ## Related projects
 
 - **[frond](https://github.com/bounded-systems/frond)** — the JS/TS counterpart.
