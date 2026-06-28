@@ -1,0 +1,58 @@
+Cargo.toml
+  s_3afa8ea03cb772::t_5a8b180fdc20b7 9-13,15
+tests/git_e2e.rs
+  s_3afa8ea03cb772::t_a9cc3befe115dd 1-57,70-95,100
+  s_3afa8ea03cb772::t_d190285fdabb44 58-69,96-99
+README.md
+  s_3afa8ea03cb772::t_5a3d3459ebbc27 51-63,65,67-68
+docs/getting-started/usage.md
+  s_3afa8ea03cb772::t_98fcecfaa99da0 5-44
+tests/fixtures/corpus/numbers-unicode.json
+  s_3afa8ea03cb772::t_215ba6f23d01e1 1
+src/lib.rs
+  s_3afa8ea03cb772::t_9ad084fb67a76b 10-16,22-24,26,31
+tests/fixtures/corpus/array-heavy.json
+  s_3afa8ea03cb772::t_215ba6f23d01e1 1
+tests/roundtrip.rs
+  s_3afa8ea03cb772::t_d190285fdabb44 48-51,58-61
+  s_3afa8ea03cb772::t_8cf04582a07503 1-47,52-57,62-82
+src/filters.rs
+  s_3afa8ea03cb772::t_d190285fdabb44 81-84
+  s_3afa8ea03cb772::t_1d7786371d9a79 3-19,21-33,35-59,63-65,67,79-80,85-100,104-105
+tests/fixtures/simple.json
+  s_3afa8ea03cb772::t_98a4969b7ad189 1-5
+tests/fixtures/corpus/package-ish.json
+  s_3afa8ea03cb772::t_215ba6f23d01e1 1
+src/lang/json.rs
+  s_3afa8ea03cb772::t_d190285fdabb44 32-33
+  s_3afa8ea03cb772::t_5fe728ea094269 1-31,34-120
+tests/fixtures/simple.canonical.json
+  s_3afa8ea03cb772::t_1cd65930a2badc 1-21
+tests/fixtures/corpus/nested-empty.json
+  s_3afa8ea03cb772::t_215ba6f23d01e1 1
+src/main.rs
+  s_3afa8ea03cb772::t_84fb5de37aab73 18-19
+  s_3afa8ea03cb772::t_1c025200d13a60 47-52,55,61-62,69-70
+src/config.rs
+  s_3afa8ea03cb772::t_9505f992636537 3-10,12,27-29,31-35,43-47,51-56
+src/lang/mod.rs
+  s_3afa8ea03cb772::t_147c874a21a039 1-64
+Cargo.lock
+  s_3afa8ea03cb772::t_cc5420314f6266 8-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "20a745da9ef8476956093ea31258c85dd9dd4dd7",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
