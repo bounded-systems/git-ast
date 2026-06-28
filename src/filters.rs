@@ -1,9 +1,10 @@
 //! Clean/smudge filter over Git's long-running `filter-process` protocol.
 //!
-//! `clean` (on `git add`) parses Rust source and stores its canonical form, so
+//! `clean` (on `git add`) parses the source and stores its canonical form, so
 //! reformatting never reaches history. `smudge` (on `git checkout`) is identity:
-//! the stored bytes are already canonical source. Only `*.rs` paths are
-//! transformed; anything else passes through untouched.
+//! the stored bytes are already canonical source. `*.rs` and `*.json` paths are
+//! transformed (by [`crate::printer`] and [`crate::json`] respectively); anything
+//! else passes through untouched.
 //!
 //! The conversation is the standard one documented in
 //! `Documentation/gitattributes.txt`:
@@ -14,7 +15,7 @@
 //!    status line and the transformed content.
 
 use crate::pktline::{self, Packet};
-use crate::{printer, Error};
+use crate::{json, printer, Error};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -102,13 +103,18 @@ fn process_one(input: &mut impl Read, output: &mut impl Write) -> Result<bool, E
     Ok(true)
 }
 
-/// Apply the requested transform. `clean` canonicalizes Rust; `smudge` is
-/// identity. Non-Rust paths pass through unchanged in both directions.
+/// Apply the requested transform. `clean` canonicalizes by language (Rust via the
+/// printer, JSON via serde_json); `smudge` is identity. Paths with no registered
+/// language pass through unchanged in both directions.
 fn transform(command: &str, pathname: &str, content: &[u8]) -> Result<Vec<u8>, Error> {
-    let is_rust = Path::new(pathname).extension().is_some_and(|e| e == "rs");
+    let ext = Path::new(pathname).extension().and_then(|e| e.to_str());
     match command {
-        "clean" if is_rust => printer::canonicalize(content),
-        "smudge" | "clean" => Ok(content.to_vec()),
+        "clean" => match ext {
+            Some("rs") => printer::canonicalize(content),
+            Some("json") => json::canonicalize(content),
+            _ => Ok(content.to_vec()),
+        },
+        "smudge" => Ok(content.to_vec()),
         other => Err(Error::Driver(format!("unknown filter command `{other}`"))),
     }
 }
@@ -185,6 +191,26 @@ mod tests {
         let mut out = Vec::new();
         converse(&mut &req[..], &mut out).unwrap();
         assert_eq!(response_content(&out), canonical);
+    }
+
+    #[test]
+    fn clean_canonicalizes_json() {
+        let req = client_stream("clean", "data.json", br#"{ "b":1, "a":2 }"#);
+        let mut out = Vec::new();
+        converse(&mut &req[..], &mut out).unwrap();
+        assert_eq!(response_content(&out), b"{\n  \"a\": 2,\n  \"b\": 1\n}\n");
+    }
+
+    #[test]
+    fn clean_reports_error_on_unparseable_json() {
+        let req = client_stream("clean", "bad.json", b"{nope}");
+        let mut out = Vec::new();
+        converse(&mut &req[..], &mut out).unwrap();
+        let mut r = &out[..];
+        pktline::read_until_flush(&mut r).unwrap(); // handshake
+        pktline::read_until_flush(&mut r).unwrap(); // capabilities
+        let status = pktline::read_until_flush(&mut r).unwrap().unwrap();
+        assert_eq!(String::from_utf8_lossy(&status).trim_end(), "status=error");
     }
 
     #[test]

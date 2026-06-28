@@ -67,7 +67,11 @@ async fn install(world: &mut AstWorld) {
     let process = format!("{} filter-process", env!("CARGO_BIN_EXE_git-ast"));
     run(&["config", "filter.git-ast.process", &process]);
     run(&["config", "filter.git-ast.required", "true"]);
-    std::fs::write(dir.join(".gitattributes"), "*.rs filter=git-ast\n").expect("write attrs");
+    std::fs::write(
+        dir.join(".gitattributes"),
+        "*.rs filter=git-ast\n*.json filter=git-ast\n",
+    )
+    .expect("write attrs");
     world.repo = Some(repo);
 }
 

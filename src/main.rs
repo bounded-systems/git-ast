@@ -71,16 +71,16 @@ fn print_help() {
          git-ast <SUBCOMMAND>\n\
          \n\
          SUBCOMMANDS:\n    \
-         setup             Enable the *.rs clean/smudge filter in this repo\n    \
+         setup             Enable the *.rs and *.json clean/smudge filter here\n    \
          inspect [FILE]    List top-level defs with a formatting-invariant hash\n    \
-         filter-process    Clean/smudge long-running filter (canonicalizes Rust)\n    \
+         filter-process    Clean/smudge long-running filter (Rust + JSON)\n    \
          diff-driver       Git diff driver (placeholder)\n    \
          merge-driver      Git merge driver (placeholder)\n    \
          --version, -V     Print version\n    \
          --help, -h        Print this help\n\
          \n\
-         The clean/smudge round-trip works for a documented Rust subset and is\n\
-         fail-closed outside it. Structural diff/merge await stable node identity;\n\
-         see docs/ for the design and scope."
+         The clean/smudge round-trip canonicalizes JSON and a documented Rust\n\
+         subset, and is fail-closed outside it. Structural diff/merge await stable\n\
+         node identity; see docs/ for the design and scope."
     );
 }

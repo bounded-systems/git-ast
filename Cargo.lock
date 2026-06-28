@@ -421,6 +421,7 @@ name = "git-ast"
 version = "0.1.0"
 dependencies = [
  "cucumber",
+ "serde_json",
  "tempfile",
  "tokio",
  "tree-sitter",
