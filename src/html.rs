@@ -25,7 +25,7 @@ use crate::Error;
 fn parse(source: &[u8]) -> Result<tree_sitter::Tree, Error> {
     let mut parser = Parser::new();
     parser
-        .set_language(&tree_sitter_html::language())
+        .set_language(&tree_sitter_html::LANGUAGE.into())
         .map_err(|e| Error::Parsing(format!("loading HTML grammar: {e}")))?;
     parser
         .parse(source, None)
