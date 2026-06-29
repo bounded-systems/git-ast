@@ -1,17 +1,24 @@
 //! One-command installation of the git-ast filter into a repository.
 //!
-//! `git-ast setup` registers the long-running filter in the current repo's git
-//! config and ensures the supported languages (`*.rs`, `*.json`) are routed
-//! through it in `.gitattributes`, so a user can enable the canonical-formatting
-//! round-trip without memorizing the config incantation. It is idempotent:
+//! `git-ast setup` registers the git-ast filter and merge driver in the current
+//! repo's git config and ensures the supported languages are routed through them
+//! in `.gitattributes`: the canonical-formatting clean/smudge filter for `*.rs`
+//! and `*.json`, plus the **structural merge driver** for `*.json`. A user can
+//! enable git-ast without memorizing the config incantation. It is idempotent:
 //! re-running it changes nothing.
 
 use crate::Error;
 use std::path::Path;
 use std::process::Command;
 
-/// `.gitattributes` lines routing the supported languages through the filter.
-const ATTR_LINES: &[&str] = &["*.rs filter=git-ast", "*.json filter=git-ast"];
+/// `.gitattributes` lines. The clean/smudge filter applies to both languages; the
+/// structural merge driver is wired for JSON only (the Rust structural merge is a
+/// later increment — routing `*.rs` here would be worse than git's text merge).
+const ATTR_LINES: &[&str] = &[
+    "*.rs filter=git-ast",
+    "*.json filter=git-ast",
+    "*.json merge=git-ast",
+];
 
 /// Configure the current repository to use git-ast for the supported languages.
 pub fn run() -> Result<(), Error> {
@@ -26,9 +33,16 @@ pub fn run() -> Result<(), Error> {
     // silently storing unfiltered bytes.
     git_config("filter.git-ast.required", "true")?;
 
+    // Structural merge driver (JSON).
+    git_config("merge.git-ast.name", "git-ast structural merge")?;
+    git_config(
+        "merge.git-ast.driver",
+        &format!("{exe} merge-driver %O %A %B %L %P"),
+    )?;
+
     ensure_attributes()?;
 
-    eprintln!("git-ast: configured filter for *.rs and *.json in this repository.");
+    eprintln!("git-ast: configured filter (*.rs, *.json) + structural merge (*.json).");
     eprintln!("git-ast: re-add existing files to canonicalize them: git add --renormalize .");
     Ok(())
 }

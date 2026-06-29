@@ -31,6 +31,7 @@ pub mod config;
 pub mod drivers;
 pub mod filters;
 pub mod json;
+pub mod merge;
 pub mod pktline;
 pub mod printer;
 pub mod setup;

@@ -28,8 +28,15 @@ use crate::Error;
 pub fn canonicalize(source: &[u8]) -> Result<Vec<u8>, Error> {
     let value: serde_json::Value =
         serde_json::from_slice(source).map_err(|e| Error::Parsing(format!("invalid JSON: {e}")))?;
+    canonicalize_value(&value)
+}
+
+/// Render an already-parsed JSON value in canonical form (sorted-key pretty JSON
+/// with a trailing newline). Shared by [`canonicalize`] and the merge driver, so
+/// a merged value is stored in exactly the same canonical form as a cleaned one.
+pub fn canonicalize_value(value: &serde_json::Value) -> Result<Vec<u8>, Error> {
     let mut out =
-        serde_json::to_vec_pretty(&value).map_err(|e| Error::Serialization(e.to_string()))?;
+        serde_json::to_vec_pretty(value).map_err(|e| Error::Serialization(e.to_string()))?;
     out.push(b'\n');
     Ok(out)
 }

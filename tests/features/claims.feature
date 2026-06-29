@@ -112,3 +112,82 @@ Feature: git-ast canonical clean/smudge round-trip
 
   Scenario: Invalid JSON is rejected (fail-closed)
     Then staging "bad.json" containing "{ not valid }" is rejected
+
+  Scenario: Structural merge — edits to different keys merge cleanly
+    When I stage "config.json" containing:
+      """
+      { "a": 1, "b": 1 }
+      """
+    And I commit
+    And I branch "theirs"
+    And I stage "config.json" containing:
+      """
+      { "a": 1, "b": 3 }
+      """
+    And I commit
+    And I check out the original branch
+    And I stage "config.json" containing:
+      """
+      { "a": 2, "b": 1 }
+      """
+    And I commit
+    And I merge "theirs"
+    Then the merge succeeds
+    And the working file "config.json" is:
+      """
+      {
+        "a": 2,
+        "b": 3
+      }
+      """
+
+  Scenario: Structural merge — same key diverging is a conflict
+    When I stage "config.json" containing:
+      """
+      { "a": 1 }
+      """
+    And I commit
+    And I branch "theirs"
+    And I stage "config.json" containing:
+      """
+      { "a": 3 }
+      """
+    And I commit
+    And I check out the original branch
+    And I stage "config.json" containing:
+      """
+      { "a": 2 }
+      """
+    And I commit
+    And I merge "theirs"
+    Then the merge conflicts
+
+  Scenario: Structural merge — nested objects, different sub-keys merge
+    When I stage "config.json" containing:
+      """
+      { "o": { "x": 1, "y": 1 } }
+      """
+    And I commit
+    And I branch "theirs"
+    And I stage "config.json" containing:
+      """
+      { "o": { "x": 1, "y": 3 } }
+      """
+    And I commit
+    And I check out the original branch
+    And I stage "config.json" containing:
+      """
+      { "o": { "x": 2, "y": 1 } }
+      """
+    And I commit
+    And I merge "theirs"
+    Then the merge succeeds
+    And the working file "config.json" is:
+      """
+      {
+        "o": {
+          "x": 2,
+          "y": 3
+        }
+      }
+      """
