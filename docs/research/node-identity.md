@@ -78,16 +78,62 @@ than GumTree: it models the two syntax trees as one graph and finds a minimal-co
 route via **Dijkstra shortest-path** — worth studying separately.
 *Source:* difftastic.wilfred.me.uk/tree_diffing.html.
 
-## 3. Resolve — binding/use-site identity (under-covered; needs its own pass)
+## 3. Resolve — binding/use-site identity
 
-Kythe (`VName` 5-tuple: signature/corpus/root/path/language — "identity is a vector"),
-SCIP/LSIF monikers (Sourcegraph; definition vs reference identity, cross-repo
-stability), and GitHub stack-graphs / `semantic` (incremental cross-file name
-resolution) target **binding identity**. **This camp was not substantiated by the
-verified claim set** in this pass (the verification budget went to construct/compute),
-so its findings are explicitly *unanswered here* and warrant a dedicated research
-pass. Of the three, stack-graphs is the most likely direct borrow for git-ast's
-binding-identity frontier (incremental, file-local resolution that composes).
+The resolve camp answers a *different* question than compute or construct: not "is
+this the same syntax across versions?" but **"which declaration does this name refer
+to?"** — distinguishing two same-named functions in different scopes, and tracking a
+symbol to its use sites. Three exemplars, ordered by fit for a text-first,
+tree-sitter, single-binary tool:
+
+**Kythe** identifies every node in its semantic graph by a **`VName` 5-tuple**
+(`signature`, `corpus`, `root`, `path`, `language`) — identity as a *vector*, with
+`signature` a per-(corpus,root,path,language) unique string. Definition / reference /
+anchor edges encode the graph. The cost is heavy: **per-language indexers wired into
+the build system** (it consumes compiler output), so it is a whole-repo, build-coupled
+pipeline — the opposite of git-ast's per-file, build-free filter.
+*Source:* kythe.io/docs/schema.
+
+**SCIP** (Sourcegraph, the LSIF successor) centers on **human-readable string symbols**
+that replace LSIF's opaque numeric IDs and "monikers" — a structured symbol scheme
+(`scheme package-manager package-name version descriptors…`) giving stable,
+**cross-repository** identifiers. It is a Protobuf format (LSIF was graph-JSON):
+reported **~8× smaller and ~3× faster to process**, ~10× faster to produce, and far
+easier to author indexers for. But SCIP is still an *index format* produced by
+**compiler/type-aware indexers** — it presumes a resolvable build, like Kythe.
+*Source:* sourcegraph.com/blog/announcing-scip.
+
+**Stack graphs** (GitHub; extend Visser et al.'s scope graphs) are the standout fit.
+Name resolution becomes **graph path-finding**: *"every valid name binding is
+represented by a path from a reference node to a definition node,"* validated by a
+**symbol stack** (push/pop nodes) that encodes shadowing/precedence. Two properties
+make them ideal for git-ast:
+- **File-local & incremental.** *"At index time we look at each file completely in
+  isolation"* — each file's graph (including unresolved cross-file references) is built
+  alone, then graphs are **merged at query time** into one commit-level graph.
+  Unchanged files reuse cached graphs; **no whole-program analysis, no build system.**
+- **Tree-sitter native.** Graphs are built from tree-sitter CSTs via a declarative
+  **graph-construction language** (`stanzas` attached to tree-sitter queries), so
+  *"the only language-specific part is the set of graph construction rules for that
+  language."*
+*Source:* github.blog/2021-12-09-introducing-stack-graphs.
+
+**Verdict for git-ast.** Kythe and SCIP both presume a build/compiler pipeline —
+disqualifying for a per-file, text-first filter. **Stack graphs are the borrow:**
+file-isolated construction matches git-ast's per-file clean filter exactly,
+tree-sitter is already the parser, and the per-language cost is *declarative graph
+rules* — structurally the same kind of additive, per-language work as git-ast's
+existing per-language printers. It hands over **cross-file matching and use-site
+tracking** (the binding axis) without a build dependency.
+
+**Does name resolution make identity more exact?** Partly, and on a *different* axis.
+Binding resolution is **exact within a single version** — "which `parse` did you
+mean" stops being a guess. That directly helps **disambiguation** (same-named symbols
+in different scopes) and **cross-file** matching. But matching binding *structure
+across versions* when the name **and** the body changed together is still the same
+NP-hard problem from §2 — resolve **complements** compute, it does not replace it.
+Net: resolve removes the *within-snapshot* ambiguity; the *across-version* heuristic
+remains.
 
 ## What git-ast should borrow next (ranked)
 
@@ -106,6 +152,9 @@ binding-identity frontier (incremental, file-local resolution that composes).
    is an open question; figures are self-reported on an author benchmark.)
    *Source:* arxiv.org/pdf/2403.05939.
 3. **Real GumTree bottom-up phase** — explicit move detection + container propagation.
+4. **Stack-graphs-style binding resolution** (§3) — declarative tree-sitter
+   graph-construction rules for the Rust subset, giving file-local cross-file matching
+   and use-site tracking with no build dependency. The resolve-camp borrow.
 
 ## Out of reach without changing the storage model
 
@@ -116,19 +165,26 @@ constraint. The honest 🟡 is the right grade.
 
 ## Open questions (next research)
 
-1. A proper **resolve pass** (Kythe / SCIP / stack-graphs) for binding/use-site
-   identity — which is most borrowable, at what implementation cost.
-2. Can refactoring-aware **declaration matching** port to tree-sitter without
+1. Can refactoring-aware **declaration matching** port to tree-sitter without
    RefactoringMiner's Java dependency, and does it generalize across grammars?
-3. A **hybrid**: persist computed node IDs as out-of-band `git notes` seeded once and
-   maintained heuristically — how robust is such attribution across `rebase`/`squash`?
-4. How does **difftastic's** Dijkstra-on-a-graph approach concretely compare to
+2. A **versioned structured store** (Dolt) as the persistence + anchoring + cross-file
+   index layer — see the companion note [`storage-model.md`](./storage-model.md). This
+   subsumes the earlier "persist IDs in `git notes`" question (Dolt has real structured
+   merge; notes collapse under `rebase`/`squash`).
+3. How does **difftastic's** Dijkstra-on-a-graph approach concretely compare to
    git-ast's statement-level edit script?
+4. What is the minimal **stack-graphs graph-construction rule set** for git-ast's Rust
+   subset, and how much of the binding axis does it unlock per unit of per-language
+   effort?
 
 ## Method note
 
-This synthesis was produced by a deep-research harness: the question was decomposed
-into 5 angles, searched in parallel, 15 sources fetched, 72 falsifiable claims
-extracted, and the top 25 adversarially verified (3-vote, majority-refute-to-kill).
-**All 25 survived (unanimous).** Lower-confidence items (the comparative framework
-itself; the resolve camp) are flagged inline above.
+The construct and compute camps (§1–2) were produced by a deep-research harness: the
+question was decomposed into 5 angles, searched in parallel, 15 sources fetched, 72
+falsifiable claims extracted, and the top 25 adversarially verified (3-vote,
+majority-refute-to-kill) — **all 25 survived (unanimous)**. The resolve camp (§3) was
+added by a lighter, direct primary-source sweep (Kythe schema, the SCIP announcement,
+the GitHub stack-graphs post) after a follow-up harness run hit a transient fetch
+rate-limit — single-source rather than triangulated, so treat §3 as well-sourced but
+not adversarially cross-verified. The comparative framework itself is reviewer-
+constructed, not lifted from one source.
