@@ -28,6 +28,7 @@
 //! Configuration is read via [`config`].
 
 pub mod blame;
+pub mod clones;
 pub mod config;
 pub mod diff;
 pub mod drivers;
