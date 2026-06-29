@@ -75,8 +75,11 @@ The core pipeline is implemented and runs through real Git:
   **structural fuzzy** pass catches the hard case — a function **renamed *and*
   edited at once** (`renamed+ parseConfig -> loadSettings`) — by Sørensen–Dice
   similarity over **Merkle subtree hashes** (GumTree's bottom-up phase: shared
-  subtrees match for free, formatting- and statement-order-invariant). A full
-  edit *script* (move detection) is the remaining frontier (below).
+  subtrees match for free, formatting- and statement-order-invariant). And
+  `git-ast match --script` prints a statement-level **edit script** inside each
+  changed function — `moved` / `changed a * 2 -> a * 3` / `inserted` / `deleted`,
+  with move detection (the GumTree top-down phase at statement granularity).
+  Sub-statement granularity is the remaining frontier (below).
 - **Structural 3-way merge for JSON.** `git-ast setup` wires a real merge driver
   ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
   **structure** — edits and additions to *different* object keys merge cleanly
@@ -109,16 +112,18 @@ Honest boundaries:
   element-level diffing/merging are later increments. The merge is both
   property-tested in Rust and **Lean-proven** ([`proofs/`](./proofs/README.md));
   the diff is Rust-tested.
-- **Node identity: matching is structural; the edit script and deeper axes
-  remain.** `git-ast match` recognizes a function across a rename, reorder, or body
-  edit (exact, content-addressed) *and* across a simultaneous rename-and-edit
-  (**structural** fuzzy — Sørensen–Dice over Merkle subtree hashes, GumTree's
-  bottom-up phase; per-node deep/Merkle content now exists). What it does **not**
-  yet do: a full GumTree **edit script** (the top-down phase, with *move*
-  detection), the remaining identity axes (binding identity via name resolution,
-  use-site identity), non-`fn` items, cross-file matching, and persisting
-  attribution (git notes). Those — refactor-aware blame in full — remain the open
-  research problem in [`docs/planning/scope.md`](./docs/planning/scope.md). (The
+- **Node identity: matching is structural, with a statement-level edit script;
+  sub-statement granularity and the deeper axes remain.** `git-ast match`
+  recognizes a function across a rename, reorder, or body edit (exact,
+  content-addressed) *and* a simultaneous rename-and-edit (**structural** fuzzy —
+  Merkle subtree hashes, GumTree bottom-up); `--script` reports per-statement
+  `moved`/`changed`/`inserted`/`deleted` with move detection (GumTree top-down, at
+  statement granularity). What it does **not** yet do: **sub-statement** edit
+  scripts (recurse into a changed statement's expression tree), the remaining
+  identity axes (binding identity via name resolution, use-site identity), non-`fn`
+  items, cross-file matching, and persisting attribution (git notes). Those —
+  refactor-aware blame in full — remain the open research problem in
+  [`docs/planning/scope.md`](./docs/planning/scope.md). (The
   fuzzy match is still a similarity heuristic with a threshold.)
 
 ## On stable node identity (the hard part)

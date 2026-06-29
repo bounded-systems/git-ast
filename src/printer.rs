@@ -179,13 +179,16 @@ pub fn subtree_hashes(node: Node, src: &[u8]) -> Vec<u64> {
 fn hash_subtree(node: Node, src: &[u8], out: &mut Vec<u64>) -> u64 {
     let mut buf = node.kind().as_bytes().to_vec();
     buf.push(0);
-    if node.named_child_count() == 0 {
+    // Walk *all* children (named + anonymous), so operators and keywords (`*` vs
+    // `+`, `let`, …) are part of the hash. Whitespace is not a CST node, so this
+    // stays formatting-invariant.
+    if node.child_count() == 0 {
         if let Ok(text) = node.utf8_text(src) {
             buf.extend_from_slice(text.as_bytes());
         }
     } else {
         let mut cursor = node.walk();
-        for child in node.named_children(&mut cursor) {
+        for child in node.children(&mut cursor) {
             let ch = hash_subtree(child, src, out);
             buf.extend_from_slice(&ch.to_le_bytes());
         }
@@ -193,6 +196,55 @@ fn hash_subtree(node: Node, src: &[u8], out: &mut Vec<u64>) -> u64 {
     let h = fnv1a(&buf);
     out.push(h);
     h
+}
+
+/// The Merkle hash of a single node (its subtree-root hash).
+fn merkle_hash(node: Node, src: &[u8]) -> u64 {
+    let mut scratch = Vec::new();
+    hash_subtree(node, src, &mut scratch)
+}
+
+/// One statement of a function body — the unit of the structural edit script
+/// ([`crate::identity::edit_script`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Statement {
+    /// Merkle hash of the statement subtree (exact identity).
+    pub hash: u64,
+    /// The statement's subtree-hash multiset (for sub-similarity scoring).
+    pub subtrees: Vec<u64>,
+    /// Canonical text of the statement (no indentation, no trailing newline).
+    pub text: String,
+}
+
+/// The ordered statements of the named function's body, each with its Merkle hash,
+/// subtree multiset, and canonical text. Returns `None` if no such function exists
+/// or its body falls outside the supported subset (fail-closed, like [`inspect`]).
+pub fn function_statements(source: &[u8], fn_name: &str) -> Option<Vec<Statement>> {
+    let tree = parse(source).ok()?;
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    let func = root.named_children(&mut cursor).find(|n| {
+        n.kind() == "function_item"
+            && n.child_by_field_name("name")
+                .and_then(|x| x.utf8_text(source).ok())
+                == Some(fn_name)
+    })?;
+    let body = func.child_by_field_name("body")?;
+    let mut stmts = Vec::new();
+    let mut bcur = body.walk();
+    for node in body.named_children(&mut bcur) {
+        let mut p = Printer {
+            src: source,
+            out: String::new(),
+        };
+        p.stmt(node, 0).ok()?; // fail-closed on an unsupported construct
+        stmts.push(Statement {
+            hash: merkle_hash(node, source),
+            subtrees: subtree_hashes(node, source),
+            text: p.out.trim_end().to_string(),
+        });
+    }
+    Some(stmts)
 }
 
 struct Printer<'a> {
