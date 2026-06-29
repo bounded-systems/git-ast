@@ -13,9 +13,9 @@ repository = "https://github.com/bounded-systems/git-ast"
 # its `Map` is a `BTreeMap` (keys sorted) with deterministic scalar formatting —
 # exactly the value-level normalization a canonical form needs.
 [dependencies]
-tree-sitter = "0.22"
-tree-sitter-rust = "0.21"
-tree-sitter-html = "0.20"
+tree-sitter = "0.26"
+tree-sitter-rust = "0.24"
+tree-sitter-html = "0.23"
 serde_json = "1"
 
 # The Gherkin suite (tests/features/*.feature) executes the README's claims
