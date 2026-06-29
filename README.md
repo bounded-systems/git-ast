@@ -67,6 +67,12 @@ The core pipeline is implemented and runs through real Git:
 - `git-ast inspect [FILE]` lists top-level definitions with a
   **formatting-invariant content hash** — a proof-of-concept of the first
   read verb (see "The interface: verbs" below).
+- **Node identity (first slice).** `git-ast match <old> <new>`
+  ([`src/identity.rs`](./src/identity.rs)) corresponds top-level functions across
+  two versions via content-addressed hashing — tracking a function through a
+  **rename** (`renamed parse -> deserialize`), a **reorder** (`unchanged`), or a
+  **body edit** (`modified`), plus `added`/`removed`. These are the *exact*,
+  zero-heuristic matches; **fuzzy** matching is the remaining frontier (below).
 - **Structural 3-way merge for JSON.** `git-ast setup` wires a real merge driver
   ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
   **structure** — edits and additions to *different* object keys merge cleanly
@@ -99,12 +105,15 @@ Honest boundaries:
   element-level diffing/merging are later increments. The merge is both
   property-tested in Rust and **Lean-proven** ([`proofs/`](./proofs/README.md));
   the diff is Rust-tested.
-- **Node identity is unsolved (the frontier).** Tracking a node through a move or
-  rename — refactor-aware history, semantic diff *beyond* canonical formatting —
-  depends on the hardest open problem, **stable AST node identity across
-  versions**, which this does **not** solve. (`git-ast inspect`'s content hash is
-  the only seam so far.) That problem is described in
-  [`docs/planning/scope.md`](./docs/planning/scope.md) and remains out of scope.
+- **Node identity: exact matching works; fuzzy matching is the frontier.**
+  `git-ast match` recognizes a function across a rename, reorder, or body edit by
+  content-addressed hashing (the *exact*, zero-heuristic matches — the README's
+  "by matching" family). What it does **not** yet do is the hard part: **fuzzy**
+  matching (a node renamed *and* edited at once, GumTree-family), the deeper
+  identity axes (deep/Merkle content, binding identity via name resolution,
+  use-site identity), non-`fn` items, cross-file matching, and persisting
+  attribution (git notes). Those — refactor-aware blame in full — remain the open
+  research problem described in [`docs/planning/scope.md`](./docs/planning/scope.md).
 
 ## On stable node identity (the hard part)
 

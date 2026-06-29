@@ -87,10 +87,16 @@ pub struct Def {
     /// The declared name.
     pub name: String,
     /// Content identity: a deterministic hash of the node's *canonical* form,
-    /// so it is **stable across reformatting**. Note this hash couples name and
-    /// body — separating the pure-content axis (alpha-normalizing the name) is
-    /// the refinement described under "Identity is a vector" in the README.
+    /// so it is **stable across reformatting**. Couples name *and* body — two
+    /// functions match here only if both are identical.
     pub content_hash: String,
+    /// Shape identity: the same hash with the function's *declared name* blanked
+    /// (the "shallow content" axis from the README). Two functions with identical
+    /// bodies but different names share a `shape_hash` — the seam that lets
+    /// [`crate::identity`] recognize a **rename**. (v1 normalizes only the
+    /// declaration; a recursive body still references the old name, so a recursive
+    /// rename reads as a body edit, not a rename.)
+    pub shape_hash: String,
 }
 
 /// The first **verbspec read verb** — "look at the AST."
@@ -122,10 +128,15 @@ pub fn inspect(source: &[u8]) -> Result<Vec<Def>, Error> {
             .and_then(|n| n.utf8_text(source).ok())
             .unwrap_or("?")
             .to_string();
+        // Shape hash: blank the declared name (the canonical form always begins
+        // `fn <name>(`), so two bodies that differ only by name share it.
+        let canonical = &printer.out;
+        let shaped = canonical.replacen(&format!("fn {name}("), "fn _(", 1);
         defs.push(Def {
             kind: "fn",
             name,
-            content_hash: fnv1a_hex(printer.out.as_bytes()),
+            content_hash: fnv1a_hex(canonical.as_bytes()),
+            shape_hash: fnv1a_hex(shaped.as_bytes()),
         });
     }
     Ok(defs)
@@ -774,6 +785,18 @@ mod tests {
         let defs = inspect(b"fn a()->i32{1+2}\nfn b()->i32{1-2}").unwrap();
         assert_eq!(defs.iter().map(|d| &d.name).collect::<Vec<_>>(), ["a", "b"]);
         assert_ne!(defs[0].content_hash, defs[1].content_hash);
+    }
+
+    #[test]
+    fn shape_hash_is_name_invariant_but_body_sensitive() {
+        // Same body, different name → same shape_hash, different content_hash.
+        let a = &inspect(b"fn a(x: i32) -> i32 { x + 1 }").unwrap()[0];
+        let b = &inspect(b"fn b(x: i32) -> i32 { x + 1 }").unwrap()[0];
+        assert_eq!(a.shape_hash, b.shape_hash, "name must not affect shape");
+        assert_ne!(a.content_hash, b.content_hash, "name must affect content");
+        // Same name, different body → different shape_hash.
+        let c = &inspect(b"fn a(x: i32) -> i32 { x + 2 }").unwrap()[0];
+        assert_ne!(a.shape_hash, c.shape_hash, "body must affect shape");
     }
 
     #[test]
