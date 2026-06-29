@@ -1,17 +1,19 @@
 //! One-command installation of the git-ast filter into a repository.
 //!
 //! `git-ast setup` registers the long-running filter in the current repo's git
-//! config and ensures `*.rs` is routed through it in `.gitattributes`, so a user
-//! can enable the canonical-formatting round-trip without memorizing the config
-//! incantation. It is idempotent: re-running it changes nothing.
+//! config and ensures the supported languages (`*.rs`, `*.json`) are routed
+//! through it in `.gitattributes`, so a user can enable the canonical-formatting
+//! round-trip without memorizing the config incantation. It is idempotent:
+//! re-running it changes nothing.
 
 use crate::Error;
 use std::path::Path;
 use std::process::Command;
 
-const ATTR_LINE: &str = "*.rs filter=git-ast";
+/// `.gitattributes` lines routing the supported languages through the filter.
+const ATTR_LINES: &[&str] = &["*.rs filter=git-ast", "*.json filter=git-ast"];
 
-/// Configure the current repository to use git-ast for `*.rs` files.
+/// Configure the current repository to use git-ast for the supported languages.
 pub fn run() -> Result<(), Error> {
     // The filter invokes this same binary; use its absolute path so the config
     // keeps working regardless of the caller's PATH.
@@ -24,10 +26,10 @@ pub fn run() -> Result<(), Error> {
     // silently storing unfiltered bytes.
     git_config("filter.git-ast.required", "true")?;
 
-    ensure_attribute()?;
+    ensure_attributes()?;
 
-    eprintln!("git-ast: configured filter for *.rs in this repository.");
-    eprintln!("git-ast: re-add existing Rust files to canonicalize them: git add --renormalize .");
+    eprintln!("git-ast: configured filter for *.rs and *.json in this repository.");
+    eprintln!("git-ast: re-add existing files to canonicalize them: git add --renormalize .");
     Ok(())
 }
 
@@ -44,20 +46,24 @@ fn git_config(key: &str, value: &str) -> Result<(), Error> {
     Ok(())
 }
 
-/// Append the `*.rs filter=git-ast` line to `.gitattributes` unless it is
-/// already present.
-fn ensure_attribute() -> Result<(), Error> {
+/// Append each [`ATTR_LINES`] entry to `.gitattributes` unless already present.
+fn ensure_attributes() -> Result<(), Error> {
     let path = Path::new(".gitattributes");
-    let existing = std::fs::read_to_string(path).unwrap_or_default();
-    if existing.lines().any(|l| l.trim() == ATTR_LINE) {
-        return Ok(());
-    }
-    let mut updated = existing;
-    if !updated.is_empty() && !updated.ends_with('\n') {
+    let mut updated = std::fs::read_to_string(path).unwrap_or_default();
+    let mut changed = false;
+    for line in ATTR_LINES {
+        if updated.lines().any(|l| l.trim() == *line) {
+            continue;
+        }
+        if !updated.is_empty() && !updated.ends_with('\n') {
+            updated.push('\n');
+        }
+        updated.push_str(line);
         updated.push('\n');
+        changed = true;
     }
-    updated.push_str(ATTR_LINE);
-    updated.push('\n');
-    std::fs::write(path, updated)?;
+    if changed {
+        std::fs::write(path, updated)?;
+    }
     Ok(())
 }

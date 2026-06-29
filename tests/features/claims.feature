@@ -67,3 +67,48 @@ Feature: git-ast canonical clean/smudge round-trip
   Scenario: Non-Rust files pass through unchanged
     When I stage "notes.txt" containing "  spaced  text  "
     Then the stored blob for "notes.txt" is "  spaced  text  "
+
+  Scenario: JSON reformatting never reaches history
+    When I stage "config.json" containing:
+      """
+      { "b": 1, "a": 2 }
+      """
+    And I commit
+    And I overwrite "config.json" with:
+      """
+      {
+          "a":  2,
+          "b":  1
+      }
+      """
+    Then "config.json" shows no diff
+
+  Scenario: Different JSON formattings store byte-identical blobs
+    When I stage "x.json" containing:
+      """
+      {"a":1,"b":2}
+      """
+    And I stage "y.json" containing:
+      """
+      { "b": 2,
+        "a": 1 }
+      """
+    Then the stored blobs for "x.json" and "y.json" are identical
+
+  Scenario: JSON round-trip restores canonical source on checkout
+    When I stage "config.json" containing:
+      """
+      { "b": 1, "a": 2 }
+      """
+    And I commit
+    And I check out "config.json" fresh
+    Then the working file "config.json" is:
+      """
+      {
+        "a": 2,
+        "b": 1
+      }
+      """
+
+  Scenario: Invalid JSON is rejected (fail-closed)
+    Then staging "bad.json" containing "{ not valid }" is rejected

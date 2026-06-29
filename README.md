@@ -48,17 +48,19 @@ For a full documentation overview, see [Documentation Index](./docs/README.md).
 
 ## Project Status
 
-**Working clean/smudge round-trip for a Rust subset.** The core pipeline is
-implemented and runs through real Git:
+**Working clean/smudge round-trip for two languages — JSON and a Rust subset.**
+The core pipeline is implemented and runs through real Git:
 
-- `git-ast setup` registers the filter in a repository.
-- On `git add`, the `clean` filter parses Rust with Tree-sitter and stores its
+- `git-ast setup` registers the filter in a repository (routes `*.rs` and
+  `*.json`).
+- On `git add`, the `clean` filter parses the source and stores its
   **canonical** form; on `git checkout`, `smudge` returns it. Reformatting
   therefore never reaches history — two differently-formatted inputs that parse
-  to the same tree produce byte-identical blobs. Canonicalization is
-  **deterministic and idempotent** (guarded by property tests; see the
-  "Determinism contract" in [`src/printer.rs`](./src/printer.rs)), with the
-  canonical form versioned by the `(grammar, printer)` pair.
+  to the same structure produce byte-identical blobs. Canonicalization is
+  **deterministic and idempotent**. Rust is canonicalized via Tree-sitter (the
+  "Determinism contract" in [`src/printer.rs`](./src/printer.rs), versioned by
+  the `(grammar, printer)` pair); JSON via `serde_json`
+  ([`src/json.rs`](./src/json.rs) — sorted keys, pretty-printed).
 - It speaks Git's real `filter-process` pkt-line protocol, so `git add` /
   `git checkout` / `git diff` all work end to end. See
   [`examples/demo.sh`](./examples/demo.sh).
@@ -68,11 +70,13 @@ implemented and runs through real Git:
 
 Honest boundaries:
 
-- **One language, a subset of it.** The pretty-printer covers the constructs in
-  the example (functions, params, blocks, `let`, binary/call/macro expressions,
-  literals, comments). It is **fail-closed**: syntax errors reject the commit,
-  and any unsupported construct returns an error rather than corrupting code.
-  Widening coverage is additive — one more arm per node kind.
+- **JSON is complete; Rust is a subset.** JSON canonicalization is total (any
+  valid JSON round-trips). The Rust pretty-printer covers the constructs in the
+  example (functions, params, blocks, `let`, binary/call/macro expressions,
+  literals, comments). Both are **fail-closed**: syntax errors reject the commit,
+  and any unsupported Rust construct returns an error rather than corrupting code.
+  Widening Rust coverage is additive — one more arm per node kind; adding a
+  language is one more arm in the filter's per-extension dispatch.
 - **Diff and merge drivers are still placeholders.** Making those *structural*
   depends on the hardest open problem — **stable AST node identity across
   versions** — which this does **not** solve. Canonical formatting removes

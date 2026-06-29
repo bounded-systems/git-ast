@@ -7,13 +7,14 @@
 //!
 //! ## Status
 //!
-//! **Working clean/smudge round-trip for a Rust subset.** The `clean` filter
-//! parses Rust with Tree-sitter and re-emits canonical source ([`printer`]),
-//! driven over Git's real `filter-process` pkt-line protocol ([`pktline`],
-//! [`filters`]) — so `git add`/`git checkout` normalize formatting end to end.
-//! The printer covers a documented subset and is fail-closed outside it. The
-//! diff and merge drivers ([`drivers`]) remain placeholders: making those
-//! structural depends on stable node identity, which is out of scope (see
+//! **Working clean/smudge round-trip for two languages.** The `clean` filter
+//! canonicalizes Rust (a documented subset, via Tree-sitter — see [`printer`])
+//! and JSON (via `serde_json` — see [`json`]), driven over Git's real
+//! `filter-process` pkt-line protocol ([`pktline`], [`filters`]) — so `git add`/
+//! `git checkout` normalize formatting end to end. Both paths are fail-closed:
+//! unparseable input rejects the commit rather than storing junk. The diff and
+//! merge drivers ([`drivers`]) remain placeholders: making those structural
+//! depends on stable node identity, which is out of scope (see
 //! `docs/planning/scope.md`).
 //!
 //! ## Integration points
@@ -29,6 +30,7 @@
 pub mod config;
 pub mod drivers;
 pub mod filters;
+pub mod json;
 pub mod pktline;
 pub mod printer;
 pub mod setup;
