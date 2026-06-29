@@ -54,3 +54,35 @@ fn match_verb_tracks_all_correspondences() {
     assert!(out.contains("removed    gone"), "got:\n{out}");
     assert!(out.contains("added      fresh"), "got:\n{out}");
 }
+
+#[test]
+fn match_script_prints_a_statement_edit_script() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("match_script");
+    fs::create_dir_all(&dir).unwrap();
+    let old = dir.join("old.rs");
+    let new = dir.join("new.rs");
+    fs::write(
+        &old,
+        "fn compute(a: i32, b: i32) -> i32 { let x = a + 1; let y = b + 2; let tmp = 0; x * y }",
+    )
+    .unwrap();
+    fs::write(
+        &new,
+        "fn compute(a: i32, b: i32) -> i32 { let y = b + 2; let x = a + 1; log(x); x + y }",
+    )
+    .unwrap();
+    let out = Command::new(BIN)
+        .arg("match")
+        .arg("--script")
+        .arg(&old)
+        .arg(&new)
+        .output()
+        .expect("run git-ast match --script");
+    assert!(out.status.success());
+    let out = String::from_utf8(out.stdout).unwrap();
+    assert!(out.contains("modified   compute"), "got:\n{out}");
+    assert!(out.contains("moved      let x = a + 1;"), "got:\n{out}");
+    assert!(out.contains("inserted   log(x);"), "got:\n{out}");
+    assert!(out.contains("changed    x * y  ->  x + y"), "got:\n{out}");
+    assert!(out.contains("deleted    let tmp = 0;"), "got:\n{out}");
+}

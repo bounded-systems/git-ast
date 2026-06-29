@@ -20,7 +20,7 @@
 //! formatting- and statement-order-invariant. A full edit *script* (the top-down
 //! phase, with move detection) remains the deeper frontier.
 
-use crate::printer::Def;
+use crate::printer::{Def, Statement};
 
 /// How a definition corresponds across two versions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,26 +184,176 @@ fn structural_dice(a: &[u64], b: &[u64]) -> f64 {
 
 /// Render correspondences as deterministic, human-readable lines.
 pub fn render(cs: &[Correspondence]) -> String {
-    let mut s = String::new();
-    for c in cs {
-        match c {
-            Correspondence::Unchanged { name } => s.push_str(&format!("unchanged  {name}\n")),
-            Correspondence::Renamed { from, to } => {
-                s.push_str(&format!("renamed    {from} -> {to}\n"))
-            }
-            Correspondence::RenamedEdited {
-                from,
-                to,
-                similarity,
-            } => s.push_str(&format!(
-                "renamed+   {from} -> {to} ({similarity}% similar)\n"
-            )),
-            Correspondence::Modified { name } => s.push_str(&format!("modified   {name}\n")),
-            Correspondence::Added { name } => s.push_str(&format!("added      {name}\n")),
-            Correspondence::Removed { name } => s.push_str(&format!("removed    {name}\n")),
+    cs.iter().map(render_correspondence).collect()
+}
+
+/// Render one correspondence as a single line (terminated by `\n`).
+pub fn render_correspondence(c: &Correspondence) -> String {
+    match c {
+        Correspondence::Unchanged { name } => format!("unchanged  {name}\n"),
+        Correspondence::Renamed { from, to } => format!("renamed    {from} -> {to}\n"),
+        Correspondence::RenamedEdited {
+            from,
+            to,
+            similarity,
+        } => format!("renamed+   {from} -> {to} ({similarity}% similar)\n"),
+        Correspondence::Modified { name } => format!("modified   {name}\n"),
+        Correspondence::Added { name } => format!("added      {name}\n"),
+        Correspondence::Removed { name } => format!("removed    {name}\n"),
+    }
+}
+
+/// A statement-level structural change inside a matched function — the unit of the
+/// GumTree top-down edit script (see [`edit_script`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditOp {
+    /// Same statement, different position (matched by hash, out of order).
+    Moved { text: String },
+    /// A statement edited in place (matched by sub-structure similarity).
+    Changed { from: String, to: String },
+    /// A statement present only in the new version.
+    Inserted { text: String },
+    /// A statement present only in the old version.
+    Deleted { text: String },
+}
+
+/// Statement-level structural edit script between two function bodies. The
+/// unchanged in-order backbone (the LCS over statement hashes) is the context and
+/// is not emitted; only moves, in-place changes, insertions and deletions are.
+pub fn edit_script(old: &[Statement], new: &[Statement]) -> Vec<EditOp> {
+    let old_h: Vec<u64> = old.iter().map(|s| s.hash).collect();
+    let new_h: Vec<u64> = new.iter().map(|s| s.hash).collect();
+    let mut old_used = vec![false; old.len()];
+    let mut new_used = vec![false; new.len()];
+
+    // 1. Unchanged backbone: LCS over statement hashes (in-order exact matches).
+    for (oi, ni) in lcs_pairs(&old_h, &new_h) {
+        old_used[oi] = true;
+        new_used[ni] = true;
+    }
+
+    // Collect with a key for deterministic ordering (new position; old for deletes).
+    let mut keyed: Vec<(usize, EditOp)> = Vec::new();
+    let mut deletes: Vec<(usize, EditOp)> = Vec::new();
+
+    // 2. Exact match, out of order → Moved.
+    for oi in 0..old.len() {
+        if old_used[oi] {
+            continue;
+        }
+        if let Some(ni) = (0..new.len()).find(|&ni| !new_used[ni] && new_h[ni] == old_h[oi]) {
+            old_used[oi] = true;
+            new_used[ni] = true;
+            keyed.push((
+                ni,
+                EditOp::Moved {
+                    text: new[ni].text.clone(),
+                },
+            ));
         }
     }
-    s
+
+    // 3. In-place edit → Changed (best sub-structure similarity above the threshold).
+    let mut ranked: Vec<(f64, usize, usize)> = Vec::new();
+    for oi in 0..old.len() {
+        if old_used[oi] {
+            continue;
+        }
+        for ni in 0..new.len() {
+            if new_used[ni] {
+                continue;
+            }
+            let s = structural_dice(&old[oi].subtrees, &new[ni].subtrees);
+            if s >= SIMILARITY_THRESHOLD {
+                ranked.push((s, oi, ni));
+            }
+        }
+    }
+    ranked.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap()
+            .then(a.1.cmp(&b.1))
+            .then(a.2.cmp(&b.2))
+    });
+    for (_s, oi, ni) in ranked {
+        if old_used[oi] || new_used[ni] {
+            continue;
+        }
+        old_used[oi] = true;
+        new_used[ni] = true;
+        keyed.push((
+            ni,
+            EditOp::Changed {
+                from: old[oi].text.clone(),
+                to: new[ni].text.clone(),
+            },
+        ));
+    }
+
+    // 4. Leftovers: insertions (new) and deletions (old).
+    for ni in 0..new.len() {
+        if !new_used[ni] {
+            keyed.push((
+                ni,
+                EditOp::Inserted {
+                    text: new[ni].text.clone(),
+                },
+            ));
+        }
+    }
+    for oi in 0..old.len() {
+        if !old_used[oi] {
+            deletes.push((
+                oi,
+                EditOp::Deleted {
+                    text: old[oi].text.clone(),
+                },
+            ));
+        }
+    }
+
+    keyed.sort_by_key(|(k, _)| *k);
+    deletes.sort_by_key(|(k, _)| *k);
+    keyed.into_iter().chain(deletes).map(|(_, op)| op).collect()
+}
+
+/// Longest common subsequence (index pairs) of two hash sequences.
+fn lcs_pairs(a: &[u64], b: &[u64]) -> Vec<(usize, usize)> {
+    let (n, m) = (a.len(), b.len());
+    let mut dp = vec![vec![0usize; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[i][j] = if a[i] == b[j] {
+                dp[i + 1][j + 1] + 1
+            } else {
+                dp[i + 1][j].max(dp[i][j + 1])
+            };
+        }
+    }
+    let mut pairs = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < n && j < m {
+        if a[i] == b[j] {
+            pairs.push((i, j));
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    pairs
+}
+
+/// Render one edit-script operation, indented under its function line.
+pub fn render_edit_op(op: &EditOp) -> String {
+    match op {
+        EditOp::Moved { text } => format!("    moved      {text}\n"),
+        EditOp::Changed { from, to } => format!("    changed    {from}  ->  {to}\n"),
+        EditOp::Inserted { text } => format!("    inserted   {text}\n"),
+        EditOp::Deleted { text } => format!("    deleted    {text}\n"),
+    }
 }
 
 #[cfg(test)]
@@ -397,5 +547,66 @@ mod tests {
             }
             other => panic!("expected RenamedEdited, got {other:?}"),
         }
+    }
+
+    // --- Statement-level edit script ---
+
+    fn script(old: &str, new: &str) -> Vec<EditOp> {
+        let o = crate::printer::function_statements(old.as_bytes(), "f").unwrap();
+        let n = crate::printer::function_statements(new.as_bytes(), "f").unwrap();
+        edit_script(&o, &n)
+    }
+
+    #[test]
+    fn edit_script_inserted_and_deleted() {
+        assert_eq!(
+            script(
+                "fn f() -> i32 { let a = 1; a }",
+                "fn f() -> i32 { let a = 1; log(a); a }"
+            ),
+            vec![EditOp::Inserted {
+                text: "log(a);".into()
+            }]
+        );
+        assert_eq!(
+            script(
+                "fn f() -> i32 { let a = 1; log(a); a }",
+                "fn f() -> i32 { let a = 1; a }"
+            ),
+            vec![EditOp::Deleted {
+                text: "log(a);".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn edit_script_changed_in_place() {
+        // Operator captured (subtree hash walks all children), so the binary expr
+        // is recognized as edited, not unchanged.
+        assert_eq!(
+            script(
+                "fn f() -> i32 { let a = 1; a * 2 }",
+                "fn f() -> i32 { let a = 1; a * 3 }"
+            ),
+            vec![EditOp::Changed {
+                from: "a * 2".into(),
+                to: "a * 3".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn edit_script_detects_a_move() {
+        // Two lets reordered; the trailing expr is the unchanged backbone.
+        let ops = script(
+            "fn f() -> i32 { let a = 1; let b = 2; a }",
+            "fn f() -> i32 { let b = 2; let a = 1; a }",
+        );
+        assert!(
+            ops.iter().any(|op| matches!(op, EditOp::Moved { .. })),
+            "expected a Moved op, got {ops:?}"
+        );
+        // No spurious insert/delete: a pure reorder is only moves.
+        assert!(ops.iter().all(|op| matches!(op, EditOp::Moved { .. })));
     }
 }

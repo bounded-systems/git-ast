@@ -65,18 +65,51 @@ fn run_inspect(args: &[String]) -> Result<u8, Error> {
 }
 
 /// The `match` read verb: correspond top-level definitions across two versions
-/// (`git-ast match <old> <new>`), reporting each as unchanged / renamed /
-/// modified / added / removed via content-addressed identity.
+/// (`git-ast match [--script] <old> <new>`), reporting each as unchanged / renamed
+/// / modified / added / removed via content-addressed identity. With `--script`,
+/// each changed function also gets a statement-level structural edit script.
 fn run_match(args: &[String]) -> Result<u8, Error> {
-    let (Some(old_path), Some(new_path)) = (args.first(), args.get(1)) else {
+    let (script, rest) = match args.split_first() {
+        Some((flag, tail)) if flag == "--script" => (true, tail),
+        _ => (false, args),
+    };
+    let (Some(old_path), Some(new_path)) = (rest.first(), rest.get(1)) else {
         return Err(Error::Config(
-            "match expects two file arguments: git-ast match <old> <new>".to_string(),
+            "match expects: git-ast match [--script] <old> <new>".to_string(),
         ));
     };
-    let old = printer::inspect(&std::fs::read(old_path)?)?;
-    let new = printer::inspect(&std::fs::read(new_path)?)?;
-    print!("{}", identity::render(&identity::match_defs(&old, &new)));
+    let old_src = std::fs::read(old_path)?;
+    let new_src = std::fs::read(new_path)?;
+    let old = printer::inspect(&old_src)?;
+    let new = printer::inspect(&new_src)?;
+
+    for c in identity::match_defs(&old, &new) {
+        print!("{}", identity::render_correspondence(&c));
+        // With --script, show what changed *inside* a matched-but-changed function.
+        if script {
+            if let Some((from, to)) = changed_fn_names(&c) {
+                if let (Some(os), Some(ns)) = (
+                    printer::function_statements(&old_src, from),
+                    printer::function_statements(&new_src, to),
+                ) {
+                    for op in identity::edit_script(&os, &ns) {
+                        print!("{}", identity::render_edit_op(&op));
+                    }
+                }
+            }
+        }
+    }
     Ok(0)
+}
+
+/// The (old, new) function names for a correspondence that changed a body, or
+/// `None` for unchanged/renamed-only/added/removed.
+fn changed_fn_names(c: &identity::Correspondence) -> Option<(&str, &str)> {
+    match c {
+        identity::Correspondence::Modified { name } => Some((name, name)),
+        identity::Correspondence::RenamedEdited { from, to, .. } => Some((from, to)),
+        _ => None,
+    }
 }
 
 fn print_help() {
