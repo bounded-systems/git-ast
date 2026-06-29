@@ -1,0 +1,25 @@
+src/printer.rs
+  s_a96a0778896457::t_52f9da17fdba31 69
+src/html.rs
+  s_a96a0778896457::t_439297c2332539 28
+Cargo.toml
+  s_a96a0778896457::t_5b9b446bce4476 16-18
+Cargo.lock
+  s_a96a0778896457::t_f40a9958ff0d0a 281-286,462-467,502-511,828,865-870,998,1000,1004-1007,1012,1014,1017,1020-1025,1028,1030,1033
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9ee1639dd32204880f7e1cf05f726c10835067f1",
+  "prompts": {},
+  "sessions": {
+    "s_a96a0778896457": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5017cc0b-421b-4314-b3a8-5ea45503231a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
