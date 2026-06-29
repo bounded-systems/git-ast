@@ -3,12 +3,14 @@
 //! The **merge driver** performs a real structural 3-way merge for `*.json`
 //! (see [`crate::merge`]): it parses base/ours/theirs, merges by structure, and
 //! writes the canonical merged JSON on a clean merge — falling back to standard
-//! conflict markers (and a non-zero exit) on a genuine conflict. Other paths keep
-//! the conflict-marker placeholder. The **diff driver** is still a placeholder
-//! (shells out to `diff -u`).
+//! conflict markers (and a non-zero exit) on a genuine conflict.
+//!
+//! The **diff driver** renders a structural diff for `*.json` (see [`crate::diff`]):
+//! object-key paths that were added/removed/changed, rather than text lines. Other
+//! paths fall back to a unified text diff (`diff -u`).
 
 use crate::merge::Merge3;
-use crate::{json, merge, Error};
+use crate::{diff, json, merge, Error};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -18,7 +20,8 @@ use std::process::Command;
 /// Git invokes `GIT_EXTERNAL_DIFF`-style with 7 args:
 /// `path old-file old-hex old-mode new-file new-hex new-mode`.
 ///
-/// Placeholder: emits a unified text diff of the two files on stdout.
+/// For `*.json` (when both versions parse), prints a structural diff. Otherwise
+/// emits a unified text diff of the two files.
 pub fn run_diff_driver(args: &[String]) -> Result<(), Error> {
     if args.len() < 7 {
         return Err(Error::Driver(
@@ -26,16 +29,33 @@ pub fn run_diff_driver(args: &[String]) -> Result<(), Error> {
         ));
     }
     let (path, old_file, new_file) = (&args[0], &args[1], &args[4]);
-    eprintln!("[diff] {path}: {old_file} -> {new_file} (placeholder: text diff)");
 
+    if path.ends_with(".json") {
+        if let Some(text) = try_json_diff(old_file, new_file) {
+            std::io::stdout().write_all(text.as_bytes())?;
+            return Ok(());
+        }
+    }
+    text_diff(old_file, new_file)
+}
+
+/// Structural JSON diff of two files. Returns `None` if either file is not valid
+/// JSON (e.g. `/dev/null` for a created/deleted file), so the caller falls back.
+fn try_json_diff(old_file: &str, new_file: &str) -> Option<String> {
+    let old: serde_json::Value = serde_json::from_slice(&std::fs::read(old_file).ok()?).ok()?;
+    let new: serde_json::Value = serde_json::from_slice(&std::fs::read(new_file).ok()?).ok()?;
+    Some(diff::render(&diff::diff(&old, &new)))
+}
+
+/// Fallback unified text diff. `diff` exits 0 (identical) or 1 (differing); both
+/// are success here.
+fn text_diff(old_file: &str, new_file: &str) -> Result<(), Error> {
     let output = Command::new("diff")
         .arg("-u")
         .arg(old_file)
         .arg(new_file)
         .output()?;
     std::io::stdout().write_all(&output.stdout)?;
-
-    // `diff` exits 0 when identical and 1 when differing; both are success here.
     match output.status.code() {
         Some(0) | Some(1) => Ok(()),
         _ => Err(Error::Driver(format!("`diff` failed: {:?}", output.status))),

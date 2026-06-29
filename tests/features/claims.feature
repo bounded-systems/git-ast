@@ -171,6 +171,20 @@ Feature: git-ast canonical clean/smudge round-trip
       }
       """
 
+  Scenario: Structural diff — git diff reports key-path changes
+    When I stage "config.json" containing:
+      """
+      { "a": 1, "b": 2 }
+      """
+    And I commit
+    And I overwrite "config.json" with:
+      """
+      { "a": 9, "c": 3 }
+      """
+    Then the diff of "config.json" contains "~ a: 1 -> 9"
+    And the diff of "config.json" contains "- b: 2"
+    And the diff of "config.json" contains "+ c: 3"
+
   Scenario: Structural merge — same key diverging is a conflict
     When I stage "config.json" containing:
       """

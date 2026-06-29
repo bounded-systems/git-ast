@@ -67,13 +67,19 @@ The core pipeline is implemented and runs through real Git:
 - `git-ast inspect [FILE]` lists top-level definitions with a
   **formatting-invariant content hash** — a proof-of-concept of the first
   read verb (see "The interface: verbs" below).
-- **Structural 3-way merge for JSON.** `git-ast setup` also wires a real merge
-  driver ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
+- **Structural 3-way merge for JSON.** `git-ast setup` wires a real merge driver
+  ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
   **structure** — edits and additions to *different* object keys merge cleanly
   even when they touch adjacent lines (where a text merge would conflict); only a
-  genuine same-key divergence conflicts. Proven against real `git merge` by the
-  cucumber claims suite. (A machine-checked **Lean** proof of the merge's
-  soundness is the immediate follow-up — see boundaries below.)
+  genuine same-key divergence conflicts. Backed **both ways**: proven against real
+  `git merge` by the cucumber claims suite, *and* by a machine-checked **Lean**
+  proof of the merge's soundness ([`proofs/JsonMerge.lean`](./proofs/JsonMerge.lean),
+  CI-gated sorry-free).
+- **Structural diff for JSON.** The diff driver
+  ([`src/diff.rs`](./src/diff.rs)) reports a `git diff` as object-key paths that
+  were added/removed/changed (`~ a.b: 1 -> 2`, `+ c: 3`, `- d`) — *what* changed
+  semantically, order-independent — rather than text lines. Non-JSON paths fall
+  back to a unified text diff.
 
 Honest boundaries:
 
@@ -88,15 +94,16 @@ Honest boundaries:
   returns an error rather than corrupting code. Widening Rust coverage is additive
   — one more arm per node kind; adding a language is one more arm in the filter's
   per-extension dispatch.
-- **Structural merge is JSON-only, and not yet Lean-proven.** The merge driver
-  handles `*.json`; the Rust-language structural merge (over the Tree-sitter CST)
-  and array element-level merging are later increments. The merge algorithm's
-  soundness is exercised by Rust property tests now; a Lean proof (the formal
-  half of "backed by Rust *and* Lean") lands next.
-- **The diff driver is still a placeholder, and merge does not track node
-  identity.** Structural *diff*, and tracking a node through a move or
-  rename, depend on the hardest open problem — **stable AST node identity across
-  versions** — which this does **not** solve. That problem is described in
+- **Structural merge and diff are JSON-only.** Both drivers handle `*.json`; the
+  Rust-language structural merge/diff (over the Tree-sitter CST) and array
+  element-level diffing/merging are later increments. The merge is both
+  property-tested in Rust and **Lean-proven** ([`proofs/`](./proofs/README.md));
+  the diff is Rust-tested.
+- **Node identity is unsolved (the frontier).** Tracking a node through a move or
+  rename — refactor-aware history, semantic diff *beyond* canonical formatting —
+  depends on the hardest open problem, **stable AST node identity across
+  versions**, which this does **not** solve. (`git-ast inspect`'s content hash is
+  the only seam so far.) That problem is described in
   [`docs/planning/scope.md`](./docs/planning/scope.md) and remains out of scope.
 
 ## On stable node identity (the hard part)
