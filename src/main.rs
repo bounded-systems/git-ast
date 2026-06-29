@@ -7,7 +7,7 @@
 use std::io::Read;
 use std::process::ExitCode;
 
-use git_ast::{blame, drivers, filters, identity, printer, setup, Error};
+use git_ast::{blame, drivers, filters, html, identity, printer, setup, Error};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -51,15 +51,23 @@ fn main() -> ExitCode {
 /// The `inspect` read verb: list top-level definitions with a
 /// formatting-invariant content hash. Reads a file argument, or stdin.
 fn run_inspect(args: &[String]) -> Result<u8, Error> {
-    let source = match args.first() {
-        Some(path) => std::fs::read(path)?,
+    let path = args.first().map(String::as_str);
+    let source = match path {
+        Some(p) => std::fs::read(p)?,
         None => {
             let mut buf = Vec::new();
             std::io::stdin().read_to_end(&mut buf)?;
             buf
         }
     };
-    for def in printer::inspect(&source)? {
+    let ext = path
+        .and_then(|p| std::path::Path::new(p).extension())
+        .and_then(|e| e.to_str());
+    let defs = match ext {
+        Some("html") | Some("htm") => html::inspect(&source)?,
+        _ => printer::inspect(&source)?,
+    };
+    for def in defs {
         println!("{} {} {}", def.kind, def.name, def.content_hash);
     }
     Ok(0)
@@ -81,8 +89,13 @@ fn run_match(args: &[String]) -> Result<u8, Error> {
     };
     let old_src = std::fs::read(old_path)?;
     let new_src = std::fs::read(new_path)?;
-    let old = printer::inspect(&old_src)?;
-    let new = printer::inspect(&new_src)?;
+    let ext = std::path::Path::new(old_path)
+        .extension()
+        .and_then(|e| e.to_str());
+    let (old, new) = match ext {
+        Some("html") | Some("htm") => (html::inspect(&old_src)?, html::inspect(&new_src)?),
+        _ => (printer::inspect(&old_src)?, printer::inspect(&new_src)?),
+    };
 
     for c in identity::match_defs(&old, &new) {
         print!("{}", identity::render_correspondence(&c));
