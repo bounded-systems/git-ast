@@ -21,6 +21,10 @@ This structural approach lets you focus on semantic changes rather than textual 
 
 ## Getting Started
 
+> The binary is named `git-ast`, so once it is on your `PATH` every command also
+> works as a **git subcommand**: `git ast setup`, `git ast match a.rs b.rs`,
+> `git ast blame src/lib.rs`.
+
 - [Installation Guide](./docs/getting-started/installation.md) - Set up Git AST in your environment
 - [Usage Guide](./docs/getting-started/usage.md) - Learn how to use Git AST in your workflow
 - [Documentation](./docs/start-here.md) - Comprehensive documentation
@@ -67,6 +71,13 @@ The core pipeline is implemented and runs through real Git:
 - `git-ast inspect [FILE]` lists top-level definitions with a
   **formatting-invariant content hash** — a proof-of-concept of the first
   read verb (see "The interface: verbs" below).
+- **Refactor-aware blame.** `git-ast blame <file>`
+  ([`src/blame.rs`](./src/blame.rs)) reports, per top-level item, the commit that
+  last changed it — **following it through renames**, so a renamed function blames
+  to where its *body* was written, not the rename commit (what plain `git blame`
+  can't do). It is **computed on demand** by walking the file's history and
+  matching items commit-to-commit — *no `git notes` persistence required*
+  ("identity is computed, not stored").
 - **Node identity.** `git-ast match <old> <new>`
   ([`src/identity.rs`](./src/identity.rs)) corresponds top-level items —
   functions, `struct`s, `enum`s, `const`/`static`, and `impl` blocks — across two
@@ -120,14 +131,16 @@ Honest boundaries:
   content-addressed) *and* a simultaneous rename-and-edit (**structural** fuzzy —
   Merkle subtree hashes, GumTree bottom-up); `--script` reports per-statement
   `moved`/`changed`/`inserted`/`deleted` with move detection (GumTree top-down, at
-  statement granularity); and it matches all top-level item kinds (`fn`, `struct`,
-  `enum`, `const`/`static`, `impl`), not just functions. What it does **not** yet
-  do: **sub-statement** edit scripts (recurse into a changed statement's expression
-  tree), the remaining identity axes (binding identity via name resolution,
-  use-site identity), cross-file matching, and persisting attribution (git notes).
-  Those — refactor-aware blame in full — remain the open research problem in
-  [`docs/planning/scope.md`](./docs/planning/scope.md). (The
-  fuzzy match is still a similarity heuristic with a threshold.)
+  statement granularity); it matches all top-level item kinds (`fn`, `struct`,
+  `enum`, `const`/`static`, `impl`), not just functions; and it powers
+  **refactor-aware blame** (`git-ast blame`, computed on demand). What it does
+  **not** yet do: **per-line** blame (this is per-definition), **sub-statement**
+  edit scripts (recurse into a changed statement's expression tree), the remaining
+  identity axes (binding identity via name resolution, use-site identity),
+  cross-file matching, and *persisting* attribution across history rewrites (the
+  git-notes transport problem). Those — refactor-aware blame in *full* — remain the
+  open research problem in [`docs/planning/scope.md`](./docs/planning/scope.md).
+  (The fuzzy match is still a similarity heuristic with a threshold.)
 
 ## On stable node identity (the hard part)
 
