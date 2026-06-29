@@ -68,8 +68,10 @@ The core pipeline is implemented and runs through real Git:
   **formatting-invariant content hash** — a proof-of-concept of the first
   read verb (see "The interface: verbs" below).
 - **Node identity.** `git-ast match <old> <new>`
-  ([`src/identity.rs`](./src/identity.rs)) corresponds top-level functions across
-  two versions. Exact, content-addressed matches first — a function tracked
+  ([`src/identity.rs`](./src/identity.rs)) corresponds top-level items —
+  functions, `struct`s, `enum`s, `const`/`static`, and `impl` blocks — across two
+  versions (matched within their kind). Exact, content-addressed matches first — an
+  item tracked
   through a **rename** (`renamed parse -> deserialize`), a **reorder**
   (`unchanged`), or a **body edit** (`modified`), plus `added`/`removed`. Then a
   **structural fuzzy** pass catches the hard case — a function **renamed *and*
@@ -118,11 +120,12 @@ Honest boundaries:
   content-addressed) *and* a simultaneous rename-and-edit (**structural** fuzzy —
   Merkle subtree hashes, GumTree bottom-up); `--script` reports per-statement
   `moved`/`changed`/`inserted`/`deleted` with move detection (GumTree top-down, at
-  statement granularity). What it does **not** yet do: **sub-statement** edit
-  scripts (recurse into a changed statement's expression tree), the remaining
-  identity axes (binding identity via name resolution, use-site identity), non-`fn`
-  items, cross-file matching, and persisting attribution (git notes). Those —
-  refactor-aware blame in full — remain the open research problem in
+  statement granularity); and it matches all top-level item kinds (`fn`, `struct`,
+  `enum`, `const`/`static`, `impl`), not just functions. What it does **not** yet
+  do: **sub-statement** edit scripts (recurse into a changed statement's expression
+  tree), the remaining identity axes (binding identity via name resolution,
+  use-site identity), cross-file matching, and persisting attribution (git notes).
+  Those — refactor-aware blame in full — remain the open research problem in
   [`docs/planning/scope.md`](./docs/planning/scope.md). (The
   fuzzy match is still a similarity heuristic with a threshold.)
 

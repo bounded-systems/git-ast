@@ -82,7 +82,8 @@ fn parse(source: &[u8]) -> Result<tree_sitter::Tree, Error> {
 /// A top-level definition surfaced by the [`inspect`] read verb.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Def {
-    /// Kind of definition (currently always `"fn"`).
+    /// Kind of definition: `"fn"`, `"struct"`, `"enum"`, `"const"`, `"static"`,
+    /// or `"impl"`.
     pub kind: &'static str,
     /// The declared name.
     pub name: String,
@@ -118,30 +119,46 @@ pub fn inspect(source: &[u8]) -> Result<Vec<Def>, Error> {
     let mut defs = Vec::new();
     let mut cursor = root.walk();
     for item in root.named_children(&mut cursor) {
-        if item.kind() != "function_item" {
-            continue;
-        }
+        // The keyword/kind for each supported top-level item (skip comments etc.).
+        let kind: &'static str = match item.kind() {
+            "function_item" => "fn",
+            "struct_item" => "struct",
+            "enum_item" => "enum",
+            "const_item" => "const",
+            "static_item" => "static",
+            "impl_item" => "impl",
+            _ => continue,
+        };
         let mut printer = Printer {
             src: source,
             out: String::new(),
         };
-        if printer.function(item, 0).is_err() {
+        if printer.item(item, 0).is_err() {
             continue; // can't hash what we can't canonicalize
         }
+        // An `impl` has no name of its own; its identity is the type it is for.
+        let name_field = if kind == "impl" { "type" } else { "name" };
         let name = item
-            .child_by_field_name("name")
+            .child_by_field_name(name_field)
             .and_then(|n| n.utf8_text(source).ok())
             .unwrap_or("?")
             .to_string();
-        // Shape hash: blank the declared name (the canonical form always begins
-        // `fn <name>(`), so two bodies that differ only by name share it.
+        // Shape hash: blank the declared name in the canonical form (which begins
+        // `<kw> <name>`), so two items that differ only by name share it — the
+        // seam for rename detection. (`impl` blocks have no leading name to blank,
+        // so their shape hash is just their content hash for now.)
         let canonical = &printer.out;
-        let shaped = canonical.replacen(&format!("fn {name}("), "fn _(", 1);
+        let shape_hash = if kind == "impl" {
+            fnv1a_hex(canonical.as_bytes())
+        } else {
+            let shaped = canonical.replacen(&format!("{kind} {name}"), &format!("{kind} _"), 1);
+            fnv1a_hex(shaped.as_bytes())
+        };
         defs.push(Def {
-            kind: "fn",
+            kind,
             name,
             content_hash: fnv1a_hex(canonical.as_bytes()),
-            shape_hash: fnv1a_hex(shaped.as_bytes()),
+            shape_hash,
             subtree_hashes: subtree_hashes(item, source),
         });
     }
@@ -909,6 +926,29 @@ mod tests {
         // Same name, different body → different shape_hash.
         let c = &inspect(b"fn a(x: i32) -> i32 { x + 2 }").unwrap()[0];
         assert_ne!(a.shape_hash, c.shape_hash, "body must affect shape");
+    }
+
+    #[test]
+    fn inspect_surfaces_all_top_level_item_kinds() {
+        let defs = inspect(
+            b"struct S { x: i32 }\nenum E { A }\nconst C: i32 = 1;\nstatic T: i32 = 2;\nfn f() -> i32 { 1 }\nimpl S { fn m(&self) -> i32 { self.x } }",
+        )
+        .unwrap();
+        let kinds: Vec<(&str, &str)> = defs.iter().map(|d| (d.kind, d.name.as_str())).collect();
+        assert!(kinds.contains(&("struct", "S")));
+        assert!(kinds.contains(&("enum", "E")));
+        assert!(kinds.contains(&("const", "C")));
+        assert!(kinds.contains(&("static", "T")));
+        assert!(kinds.contains(&("fn", "f")));
+        assert!(kinds.contains(&("impl", "S"))); // impl identified by its type
+    }
+
+    #[test]
+    fn struct_rename_with_same_fields_shares_shape_hash() {
+        let a = &inspect(b"struct Point { x: i32, y: i32 }").unwrap()[0];
+        let b = &inspect(b"struct Coord { x: i32, y: i32 }").unwrap()[0];
+        assert_eq!(a.shape_hash, b.shape_hash, "renamed struct, same fields");
+        assert_ne!(a.content_hash, b.content_hash);
     }
 
     #[test]
