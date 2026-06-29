@@ -1,0 +1,45 @@
+tests/merge_vectors.json
+  s_3afa8ea03cb772::t_431835265c27ab 1-37
+src/setup.rs
+  s_3afa8ea03cb772::t_655c49ef247cd3 3-7,14-21,36-42,45
+README.md
+  s_3afa8ea03cb772::t_cc789252b780db 70-76,87-95
+tests/merge.rs
+  s_3afa8ea03cb772::t_0e4b5d9c0253e1 33-37,62-66
+  s_3afa8ea03cb772::t_a8af9d8c5fdc30 1-2,8-32,38-61,67-101
+  s_3afa8ea03cb772::t_fd259fb844b889 3-7
+src/json.rs
+  s_3afa8ea03cb772::t_63e9c0fab19bb3 31-37,39
+tests/claims.rs
+  s_3afa8ea03cb772::t_dbf8ed15679789 158-185
+  s_3afa8ea03cb772::t_0e4b5d9c0253e1 69-73
+  s_3afa8ea03cb772::t_6ae9addaad720f 68,75-81,84
+  s_3afa8ea03cb772::t_7b064eb287514e 21
+src/drivers.rs
+  s_3afa8ea03cb772::t_e7a0c298c0718c 48-49,51-54,61,66,70-100,103,105,107-108
+  s_3afa8ea03cb772::t_15c98c44344d15 3-8,10-11
+src/lib.rs
+  s_3afa8ea03cb772::t_28e689e0a1b686 34
+src/merge.rs
+  s_3afa8ea03cb772::t_4c92f0f544a503 1-22,28-64,70-71,77-94,100-130,135-138,143-146,151-155,161-165,170-179,184-188,194-199,204-218,227-233,239-245
+  s_3afa8ea03cb772::t_0e4b5d9c0253e1 65-69,72-76,95-99,131-134,139-142,147-150,156-160,166-169,180-183,189-193,200-203,219-226,234-238
+  s_3afa8ea03cb772::t_288f610de5cafc 23-27
+tests/features/claims.feature
+  s_3afa8ea03cb772::t_9002ee468a91fd 115-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9a82a40018de6bb8c531ee811d89a54027551774",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
