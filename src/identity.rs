@@ -11,13 +11,14 @@
 //! - **shape_hash** (body, declared name blanked) equal → a **rename** (same body,
 //!   new name).
 //!
-//! [`match_defs`] layers these strongest-first, then adds a **fuzzy** final pass:
-//! leftover defs (a different name *and* a different body) are scored by
-//! Sørensen–Dice similarity over their name-blanked bodies and paired greedily
-//! above a threshold — recognizing a function that was **renamed and edited at
-//! once**. This is the lightweight cousin of GumTree-family matching (string
-//! similarity, not a tree edit script); full structural fuzzy matching remains
-//! the deeper frontier.
+//! [`match_defs`] layers these strongest-first, then adds a **structural fuzzy**
+//! final pass: leftover defs (a different name *and* a different body) are scored
+//! by Sørensen–Dice similarity over their **Merkle subtree-hash multisets**
+//! ([`crate::printer::Def::subtree_hashes`]) and paired greedily above a threshold
+//! — recognizing a function that was **renamed and edited at once**. Comparing
+//! shared *subtrees* (not body text) is GumTree's bottom-up phase: it is
+//! formatting- and statement-order-invariant. A full edit *script* (the top-down
+//! phase, with move detection) remains the deeper frontier.
 
 use crate::printer::Def;
 
@@ -103,12 +104,9 @@ pub fn match_defs(old: &[Def], new: &[Def]) -> Vec<Correspondence> {
     let mut ranked: Vec<(f64, usize, usize)> = Vec::new();
     for &oi in &leftover(&old_used) {
         for &ni in &leftover(&new_used) {
-            // Compare *bodies* (post-signature), so short functions are not
-            // matched on shared `fn _(…) -> … {` boilerplate.
-            let s = dice(
-                body_of(&old[oi].shape_source),
-                body_of(&new[ni].shape_source),
-            );
+            // Structural similarity: shared Merkle subtrees (GumTree bottom-up),
+            // not string overlap — formatting- and order-invariant.
+            let s = structural_dice(&old[oi].subtree_hashes, &new[ni].subtree_hashes);
             if s >= SIMILARITY_THRESHOLD {
                 ranked.push((s, oi, ni));
             }
@@ -161,39 +159,27 @@ pub fn match_defs(old: &[Def], new: &[Def]) -> Vec<Correspondence> {
 /// as the same node renamed-and-edited; below it, they are add/remove.
 const SIMILARITY_THRESHOLD: f64 = 0.5;
 
-/// The function body: from the first `{` onward (signature stripped). Falls back
-/// to the whole string if there is no brace.
-fn body_of(shape: &str) -> &str {
-    match shape.find('{') {
-        Some(i) => &shape[i..],
-        None => shape,
+/// Sørensen–Dice coefficient over the two **Merkle subtree-hash multisets**:
+/// `2·|A∩B| / (|A|+|B|)`. A structural similarity in `[0, 1]` — shared subtrees
+/// (formatting- and order-invariant) count exactly. The inputs are sorted, but we
+/// count via a map so the measure is a true multiset intersection.
+fn structural_dice(a: &[u64], b: &[u64]) -> f64 {
+    if a.is_empty() || b.is_empty() {
+        return if a.len() == b.len() { 1.0 } else { 0.0 };
     }
-}
-
-/// Sørensen–Dice coefficient over character bigrams: `2·|A∩B| / (|A|+|B|)`,
-/// a dependency-free string similarity in `[0, 1]`.
-fn dice(a: &str, b: &str) -> f64 {
-    let bigrams = |s: &str| -> Vec<(char, char)> {
-        let chars: Vec<char> = s.chars().collect();
-        chars.windows(2).map(|w| (w[0], w[1])).collect()
-    };
-    let (ba, bb) = (bigrams(a), bigrams(b));
-    if ba.is_empty() || bb.is_empty() {
-        return if ba.len() == bb.len() { 1.0 } else { 0.0 };
-    }
-    let mut counts: std::collections::HashMap<(char, char), i32> = std::collections::HashMap::new();
-    for g in &ba {
-        *counts.entry(*g).or_insert(0) += 1;
+    let mut counts: std::collections::HashMap<u64, i32> = std::collections::HashMap::new();
+    for &h in a {
+        *counts.entry(h).or_insert(0) += 1;
     }
     let mut inter = 0usize;
-    for g in &bb {
-        let c = counts.entry(*g).or_insert(0);
+    for &h in b {
+        let c = counts.entry(h).or_insert(0);
         if *c > 0 {
             *c -= 1;
             inter += 1;
         }
     }
-    2.0 * inter as f64 / (ba.len() + bb.len()) as f64
+    2.0 * inter as f64 / (a.len() + b.len()) as f64
 }
 
 /// Render correspondences as deterministic, human-readable lines.
@@ -307,9 +293,28 @@ mod tests {
                     (from.as_str(), to.as_str()),
                     ("parseConfig", "loadSettings")
                 );
-                assert!(*similarity >= 80, "similarity was {similarity}");
+                // Structural Dice: shared subtrees, minus the edited node's
+                // ancestor chain. Above the match threshold, below string Dice.
+                assert!(*similarity >= 50, "similarity was {similarity}");
             }
             other => panic!("expected one RenamedEdited, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reordered_and_edited_matches_structurally() {
+        // Statements reordered AND one edited, plus renamed. The Merkle subtree
+        // multiset is order-independent, so the moved `let` statements still match
+        // — recognized as the same node where string similarity would be shakier.
+        let cs = matched(
+            "fn f(a: i32, b: i32) -> i32 { let x = a + 1; let y = b + 2; x * y }",
+            "fn g(a: i32, b: i32) -> i32 { let y = b + 2; let x = a + 1; x + y }",
+        );
+        match cs.as_slice() {
+            [Correspondence::RenamedEdited { from, to, .. }] => {
+                assert_eq!((from.as_str(), to.as_str()), ("f", "g"));
+            }
+            other => panic!("expected RenamedEdited f -> g, got {other:?}"),
         }
     }
 

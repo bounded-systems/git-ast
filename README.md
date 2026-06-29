@@ -72,10 +72,11 @@ The core pipeline is implemented and runs through real Git:
   two versions. Exact, content-addressed matches first — a function tracked
   through a **rename** (`renamed parse -> deserialize`), a **reorder**
   (`unchanged`), or a **body edit** (`modified`), plus `added`/`removed`. Then a
-  **fuzzy** pass catches the hard case — a function **renamed *and* edited at
-  once** (`renamed+ parseConfig -> loadSettings (96% similar)`) — by Sørensen–Dice
-  similarity over the bodies. Full structural (GumTree-style) matching is the
-  remaining frontier (below).
+  **structural fuzzy** pass catches the hard case — a function **renamed *and*
+  edited at once** (`renamed+ parseConfig -> loadSettings`) — by Sørensen–Dice
+  similarity over **Merkle subtree hashes** (GumTree's bottom-up phase: shared
+  subtrees match for free, formatting- and statement-order-invariant). A full
+  edit *script* (move detection) is the remaining frontier (below).
 - **Structural 3-way merge for JSON.** `git-ast setup` wires a real merge driver
   ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
   **structure** — edits and additions to *different* object keys merge cleanly
@@ -108,18 +109,17 @@ Honest boundaries:
   element-level diffing/merging are later increments. The merge is both
   property-tested in Rust and **Lean-proven** ([`proofs/`](./proofs/README.md));
   the diff is Rust-tested.
-- **Node identity: matching works (exact + lightweight fuzzy); structural fuzzy
-  and the deeper axes remain.** `git-ast match` recognizes a function across a
-  rename, reorder, or body edit (exact, content-addressed) *and* across a
-  simultaneous rename-and-edit (fuzzy, via body string-similarity). What it does
-  **not** yet do: **structural** fuzzy matching (a real GumTree tree-edit script,
-  rather than string similarity over the canonical body), the deeper identity axes
-  (deep/Merkle content, binding identity via name resolution, use-site identity),
-  non-`fn` items, cross-file matching, and persisting attribution (git notes).
-  Those — refactor-aware blame in full — remain the open research problem described
-  in [`docs/planning/scope.md`](./docs/planning/scope.md). Note the fuzzy match is a
-  heuristic with a similarity threshold; very small functions are noisier (less
-  body to compare).
+- **Node identity: matching is structural; the edit script and deeper axes
+  remain.** `git-ast match` recognizes a function across a rename, reorder, or body
+  edit (exact, content-addressed) *and* across a simultaneous rename-and-edit
+  (**structural** fuzzy — Sørensen–Dice over Merkle subtree hashes, GumTree's
+  bottom-up phase; per-node deep/Merkle content now exists). What it does **not**
+  yet do: a full GumTree **edit script** (the top-down phase, with *move*
+  detection), the remaining identity axes (binding identity via name resolution,
+  use-site identity), non-`fn` items, cross-file matching, and persisting
+  attribution (git notes). Those — refactor-aware blame in full — remain the open
+  research problem in [`docs/planning/scope.md`](./docs/planning/scope.md). (The
+  fuzzy match is still a similarity heuristic with a threshold.)
 
 ## On stable node identity (the hard part)
 

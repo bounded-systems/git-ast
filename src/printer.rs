@@ -97,10 +97,11 @@ pub struct Def {
     /// declaration; a recursive body still references the old name, so a recursive
     /// rename reads as a body edit, not a rename.)
     pub shape_hash: String,
-    /// The name-blanked canonical text `shape_hash` is computed from. Kept so the
-    /// fuzzy matcher in [`crate::identity`] can *measure* body similarity (not
-    /// just test equality) — recognizing a function that was renamed *and* edited.
-    pub shape_source: String,
+    /// The multiset of Merkle subtree hashes (sorted) of the function's CST — the
+    /// node's deep content. The fuzzy matcher in [`crate::identity`] measures
+    /// *structural* similarity over these (shared subtrees), recognizing a
+    /// function that was renamed *and* edited at once.
+    pub subtree_hashes: Vec<u64>,
 }
 
 /// The first **verbspec read verb** — "look at the AST."
@@ -141,22 +142,57 @@ pub fn inspect(source: &[u8]) -> Result<Vec<Def>, Error> {
             name,
             content_hash: fnv1a_hex(canonical.as_bytes()),
             shape_hash: fnv1a_hex(shaped.as_bytes()),
-            shape_source: shaped,
+            subtree_hashes: subtree_hashes(item, source),
         });
     }
     Ok(defs)
 }
 
-/// Dependency-free, deterministic 64-bit FNV-1a hash, rendered as hex. Adequate
-/// for a content-identity proof-of-concept; a real model store would use a
-/// cryptographic hash.
-fn fnv1a_hex(bytes: &[u8]) -> String {
+/// Dependency-free, deterministic 64-bit FNV-1a hash. Adequate for content
+/// identity here; a real model store would use a cryptographic hash.
+fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for &byte in bytes {
         hash ^= byte as u64;
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
-    format!("{hash:016x}")
+    hash
+}
+
+/// [`fnv1a`] rendered as fixed-width hex.
+fn fnv1a_hex(bytes: &[u8]) -> String {
+    format!("{:016x}", fnv1a(bytes))
+}
+
+/// The multiset of **Merkle subtree hashes** of `node` (post-order). Each node is
+/// hashed as `fnv1a(kind ++ (leaf ? text : child_hashes))`, so a subtree's hash is
+/// the deep content of that subtree — text-inclusive and formatting-invariant.
+/// Two functions that share a sub-expression share its hash exactly; this is the
+/// bottom-up phase of structural (GumTree-family) matching. Returned sorted.
+pub fn subtree_hashes(node: Node, src: &[u8]) -> Vec<u64> {
+    let mut out = Vec::new();
+    hash_subtree(node, src, &mut out);
+    out.sort_unstable();
+    out
+}
+
+fn hash_subtree(node: Node, src: &[u8], out: &mut Vec<u64>) -> u64 {
+    let mut buf = node.kind().as_bytes().to_vec();
+    buf.push(0);
+    if node.named_child_count() == 0 {
+        if let Ok(text) = node.utf8_text(src) {
+            buf.extend_from_slice(text.as_bytes());
+        }
+    } else {
+        let mut cursor = node.walk();
+        for child in node.named_children(&mut cursor) {
+            let ch = hash_subtree(child, src, out);
+            buf.extend_from_slice(&ch.to_le_bytes());
+        }
+    }
+    let h = fnv1a(&buf);
+    out.push(h);
+    h
 }
 
 struct Printer<'a> {
@@ -790,6 +826,25 @@ mod tests {
         let defs = inspect(b"fn a()->i32{1+2}\nfn b()->i32{1-2}").unwrap();
         assert_eq!(defs.iter().map(|d| &d.name).collect::<Vec<_>>(), ["a", "b"]);
         assert_ne!(defs[0].content_hash, defs[1].content_hash);
+    }
+
+    #[test]
+    fn subtree_hashes_are_formatting_invariant_and_share_subexpressions() {
+        // Same function, two formattings → identical subtree-hash multisets.
+        let a = &inspect(b"fn f(x:i32)->i32{x+1}").unwrap()[0];
+        let b = &inspect(b"fn f(x: i32) -> i32 {\n\n    x + 1\n}\n").unwrap()[0];
+        assert_eq!(a.subtree_hashes, b.subtree_hashes);
+        // Two functions sharing the sub-expression `x + 1` share its subtree hash.
+        let c = &inspect(b"fn g(x: i32) -> i32 { x + 1 + 2 }").unwrap()[0];
+        let common = a
+            .subtree_hashes
+            .iter()
+            .filter(|h| c.subtree_hashes.contains(h))
+            .count();
+        assert!(
+            common > 0,
+            "shared sub-expression should share a subtree hash"
+        );
     }
 
     #[test]
