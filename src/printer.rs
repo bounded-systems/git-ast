@@ -97,6 +97,10 @@ pub struct Def {
     /// declaration; a recursive body still references the old name, so a recursive
     /// rename reads as a body edit, not a rename.)
     pub shape_hash: String,
+    /// The name-blanked canonical text `shape_hash` is computed from. Kept so the
+    /// fuzzy matcher in [`crate::identity`] can *measure* body similarity (not
+    /// just test equality) — recognizing a function that was renamed *and* edited.
+    pub shape_source: String,
 }
 
 /// The first **verbspec read verb** — "look at the AST."
@@ -137,6 +141,7 @@ pub fn inspect(source: &[u8]) -> Result<Vec<Def>, Error> {
             name,
             content_hash: fnv1a_hex(canonical.as_bytes()),
             shape_hash: fnv1a_hex(shaped.as_bytes()),
+            shape_source: shaped,
         });
     }
     Ok(defs)
