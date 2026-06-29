@@ -1,0 +1,38 @@
+src/printer.rs
+  s_3afa8ea03cb772::t_866b728de1a347 791-801
+  s_3afa8ea03cb772::t_7ec6315c1b5272 131-134,138-139
+  s_3afa8ea03cb772::t_5415f13da58530 90-91,93-99
+  s_3afa8ea03cb772::t_c1cc488b79f6da 790
+tests/identity_cli.rs
+  s_3afa8ea03cb772::t_27255aa7191e2e 1-21,27-36,41-43
+  s_3afa8ea03cb772::t_2a3ab6f390e54a 22-26,37-40
+src/identity.rs
+  s_3afa8ea03cb772::t_2a3ab6f390e54a 111-113,153-156,178-183,197-212,236-239,244-246
+  s_3afa8ea03cb772::t_380bfce06389e4 1-110,114-152,157-177,184-196,213-235,240-243,247-250
+src/lib.rs
+  s_3afa8ea03cb772::t_856077f20695ef 34
+README.md
+  s_3afa8ea03cb772::t_3f2ea05270fd6c 70-75
+  s_3afa8ea03cb772::t_28b21f369e902f 108-116
+src/main.rs
+  s_3afa8ea03cb772::t_8ea0d4e1b2900f 22
+  s_3afa8ea03cb772::t_78558d44b77bca 67-81
+  s_3afa8ea03cb772::t_7ba78ffa8e86ea 92
+  s_3afa8ea03cb772::t_a0cedd2309ad19 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "3591e0f2ded2b0639c6489727b7ec8719a7ab098",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
