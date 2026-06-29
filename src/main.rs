@@ -7,7 +7,7 @@
 use std::io::Read;
 use std::process::ExitCode;
 
-use git_ast::{blame, drivers, filters, html, identity, printer, setup, Error};
+use git_ast::{blame, clones, drivers, filters, html, identity, printer, setup, Error};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -21,6 +21,7 @@ fn main() -> ExitCode {
         "inspect" => run_inspect(rest),
         "match" => run_match(rest),
         "blame" => run_blame(rest),
+        "clones" => run_clones(rest),
         "filter-process" => filters::run_long_running_filter().map(|()| 0u8),
         "diff-driver" => drivers::run_diff_driver(rest).map(|()| 0u8),
         "merge-driver" => drivers::run_merge_driver(rest).map(|()| 0u8),
@@ -116,6 +117,52 @@ fn run_match(args: &[String]) -> Result<u8, Error> {
     Ok(0)
 }
 
+/// The `clones` read verb: detect structurally identical definitions across files.
+///
+/// Groups top-level definitions by `shape_hash` (body-only identity, name-blind).
+/// Any group with two or more members is a structural clone: same canonical body,
+/// possibly different declared names. This is the first concrete step of the
+/// identity index described in `docs/research/identity-index.md` — an in-memory
+/// occurrence map, exact by construction (no similarity threshold).
+fn run_clones(args: &[String]) -> Result<u8, Error> {
+    if args.is_empty() {
+        return Err(Error::Config(
+            "clones expects: git-ast clones <file>...".to_string(),
+        ));
+    }
+    let mut file_defs: Vec<(String, Vec<printer::Def>)> = Vec::new();
+    for path in args {
+        let source = std::fs::read(path)?;
+        let ext = std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str());
+        let defs = match ext {
+            Some("html") | Some("htm") => html::inspect(&source)?,
+            _ => printer::inspect(&source)?,
+        };
+        if !defs.is_empty() {
+            file_defs.push((path.clone(), defs));
+        }
+    }
+    let pairs: Vec<(&str, &[printer::Def])> = file_defs
+        .iter()
+        .map(|(p, d)| (p.as_str(), d.as_slice()))
+        .collect();
+    let groups = clones::find_clones(&pairs);
+    for group in &groups {
+        println!(
+            "{}  {}×{}",
+            group.shape_hash,
+            group.occurrences.len(),
+            group.kind
+        );
+        for occ in &group.occurrences {
+            println!("  {}  {}", occ.file, occ.name);
+        }
+    }
+    Ok(0)
+}
+
 /// The `blame` verb: refactor-aware, per-definition blame
 /// (`git-ast blame <file>`). For each top-level item, prints the commit that last
 /// changed it — following it through renames.
@@ -153,6 +200,7 @@ fn print_help() {
          inspect [FILE]    List top-level defs with a formatting-invariant hash\n    \
          match OLD NEW     Correspond defs across two versions (rename/move/edit)\n    \
          blame FILE        Per-def blame, following items through renames\n    \
+         clones FILE...    Detect structurally identical defs across files\n    \
          filter-process    Clean/smudge long-running filter (Rust + JSON)\n    \
          diff-driver       Structural diff (JSON); text diff otherwise\n    \
          merge-driver      Structural 3-way merge (JSON)\n    \
