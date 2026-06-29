@@ -15,7 +15,7 @@
 //!    status line and the transformed content.
 
 use crate::pktline::{self, Packet};
-use crate::{json, printer, Error};
+use crate::{html, json, printer, Error};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -112,6 +112,7 @@ fn transform(command: &str, pathname: &str, content: &[u8]) -> Result<Vec<u8>, E
         "clean" => match ext {
             Some("rs") => printer::canonicalize(content),
             Some("json") => json::canonicalize(content),
+            Some("html") | Some("htm") => html::canonicalize(content),
             _ => Ok(content.to_vec()),
         },
         "smudge" => Ok(content.to_vec()),

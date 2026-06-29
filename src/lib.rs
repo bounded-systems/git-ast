@@ -32,6 +32,7 @@ pub mod config;
 pub mod diff;
 pub mod drivers;
 pub mod filters;
+pub mod html;
 pub mod identity;
 pub mod json;
 pub mod merge;

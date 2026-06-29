@@ -19,6 +19,8 @@ const ATTR_LINES: &[&str] = &[
     "*.json filter=git-ast",
     "*.json merge=git-ast",
     "*.json diff=git-ast",
+    "*.html filter=git-ast",
+    "*.htm filter=git-ast",
 ];
 
 /// Configure the current repository to use git-ast for the supported languages.
