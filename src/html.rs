@@ -175,7 +175,8 @@ fn extract_attr_value(node: Node, src: &[u8]) -> String {
             // use `node` again in the fallback path.
             let found: Option<String> = {
                 let mut c = node.walk();
-                let x = node.named_children(&mut c)
+                let x = node
+                    .named_children(&mut c)
                     .find(|n| n.kind() == "attribute_value")
                     .and_then(|n| n.utf8_text(src).ok())
                     .map(str::to_string);
@@ -425,8 +426,7 @@ fn element_to_def(node: Node, src: &[u8]) -> Option<Def> {
     let mut cursor = node.walk();
     let children: Vec<Node> = node.children(&mut cursor).collect();
     drop(cursor);
-    let (tag_node, has_body) = if let Some(&st) =
-        children.iter().find(|n| n.kind() == "start_tag")
+    let (tag_node, has_body) = if let Some(&st) = children.iter().find(|n| n.kind() == "start_tag")
     {
         (st, true)
     } else if let Some(&sc) = children.iter().find(|n| n.kind() == "self_closing_tag") {
@@ -443,7 +443,11 @@ fn element_to_def(node: Node, src: &[u8]) -> Option<Def> {
         .get("role")
         .and_then(|r| aria_kind(r))
         .or_else(|| implicit_role(&tag_name))?;
-    let text = if has_body { collect_text(node, src) } else { String::new() };
+    let text = if has_body {
+        collect_text(node, src)
+    } else {
+        String::new()
+    };
     let name = accessible_name(&attrs, &text).unwrap_or_default();
     Some(make_def(kind, &name, &tag_name, &attrs))
 }
@@ -488,12 +492,7 @@ fn self_closing_to_def(node: Node, src: &[u8]) -> Option<Def> {
 /// so two elements that differ only in label share the same shape.
 const NAME_ATTRS: &[&str] = &["aria-label", "title", "alt"];
 
-fn make_def(
-    kind: &'static str,
-    name: &str,
-    tag: &str,
-    attrs: &BTreeMap<String, String>,
-) -> Def {
+fn make_def(kind: &'static str, name: &str, tag: &str, attrs: &BTreeMap<String, String>) -> Def {
     let attr_str: String = attrs
         .iter()
         .map(|(k, v)| format!("{k}={v}"))
@@ -571,7 +570,10 @@ mod tests {
     #[test]
     fn values_double_quoted() {
         let out = canon(r#"<a href='/page'>link</a>"#);
-        assert!(out.contains(r#"href="/page""#), "single quotes not converted: {out}");
+        assert!(
+            out.contains(r#"href="/page""#),
+            "single quotes not converted: {out}"
+        );
     }
 
     #[test]
@@ -599,7 +601,10 @@ mod tests {
     fn script_and_style_preserved_verbatim() {
         let src = "<script>var x={b:1,a:2};</script>";
         let out = canon(src);
-        assert!(out.contains("var x={b:1,a:2};"), "script was modified: {out}");
+        assert!(
+            out.contains("var x={b:1,a:2};"),
+            "script was modified: {out}"
+        );
     }
 
     // ── inspect ───────────────────────────────────────────────────────────────
@@ -704,7 +709,11 @@ mod tests {
     fn subtree_hashes_nonempty_for_semantic_elements() {
         let ds = defs(r#"<nav aria-label="Main"><a href="/">Home</a></nav>"#);
         for d in &ds {
-            assert!(!d.subtree_hashes.is_empty(), "no subtree hashes for {}", d.kind);
+            assert!(
+                !d.subtree_hashes.is_empty(),
+                "no subtree hashes for {}",
+                d.kind
+            );
         }
     }
 }
