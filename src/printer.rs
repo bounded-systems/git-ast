@@ -7,14 +7,18 @@
 //!
 //! ## Scope
 //!
-//! This printer covers a documented *subset* of Rust — enough to round-trip the
-//! kinds of items in `examples/rust_simple_addition/` (functions, parameters,
-//! blocks, `let` bindings, binary/call/macro expressions, literals, and line and
-//! block comments). It is deliberately **fail-closed**: a syntax error or any
-//! node kind the printer does not understand returns an [`Error`] rather than
+//! This printer covers a documented *subset* of Rust. Module items: `use`
+//! declarations, `const`/`static`, named & unit `struct`s, unit-variant `enum`s,
+//! and `impl` blocks (inherent and trait impls). Inside functions: parameters
+//! (incl. `self` receivers), blocks, `let` bindings, and expressions —
+//! binary/call/macro, field access, struct literals, paths, references (`&`/
+//! `&mut`), and simple generics (`Vec<T>`) — plus literals and line/block
+//! comments. It is deliberately **fail-closed**: a syntax error or any node kind
+//! the printer does not understand (tuple structs, traits, generic *parameters*,
+//! enum payloads, lifetimes, closures, …) returns an [`Error`] rather than
 //! guessing, so the filter can never silently corrupt code it cannot represent.
 //! Widening the subset is additive — each new node kind is one more arm in
-//! [`Printer::expr`] / [`Printer::stmt`].
+//! [`Printer::item`] / [`Printer::stmt`] / [`Printer::expr`].
 //!
 //! ## Determinism contract
 //!
@@ -183,6 +187,11 @@ impl<'a> Printer<'a> {
     fn item(&mut self, node: Node, depth: usize) -> Result<(), Error> {
         match node.kind() {
             "function_item" => self.function(node, depth),
+            "use_declaration" => self.use_declaration(node, depth),
+            "const_item" | "static_item" => self.const_or_static(node, depth),
+            "struct_item" => self.struct_item(node, depth),
+            "enum_item" => self.enum_item(node, depth),
+            "impl_item" => self.impl_item(node, depth),
             "line_comment" | "block_comment" => {
                 self.indent(depth);
                 self.out.push_str(self.text(node)?);
@@ -191,6 +200,142 @@ impl<'a> Printer<'a> {
             }
             _ => Err(self.unsupported(node, "top-level item")),
         }
+    }
+
+    /// `use a::b::c;` / `use a::b::*;`. Brace lists are not supported yet
+    /// (fail-closed via [`Self::use_argument`]).
+    fn use_declaration(&mut self, node: Node, depth: usize) -> Result<(), Error> {
+        let arg = self.field(node, "argument")?;
+        self.indent(depth);
+        self.out.push_str("use ");
+        self.out.push_str(&self.use_argument(arg)?);
+        self.out.push_str(";\n");
+        Ok(())
+    }
+
+    fn use_argument(&self, node: Node) -> Result<String, Error> {
+        match node.kind() {
+            "identifier" | "scoped_identifier" => self.expr(node),
+            "use_wildcard" => {
+                let inner = node
+                    .named_child(0)
+                    .ok_or_else(|| self.unsupported(node, "use wildcard"))?;
+                Ok(format!("{}::*", self.expr(inner)?))
+            }
+            _ => Err(self.unsupported(node, "use argument")),
+        }
+    }
+
+    /// `const NAME: TYPE = VALUE;` or `static NAME: TYPE = VALUE;`.
+    fn const_or_static(&mut self, node: Node, depth: usize) -> Result<(), Error> {
+        let keyword = if node.kind() == "static_item" {
+            "static "
+        } else {
+            "const "
+        };
+        let name = self.field(node, "name")?;
+        let ty = self.field(node, "type")?;
+        let value = self.field(node, "value")?;
+        self.indent(depth);
+        self.out.push_str(keyword);
+        self.out.push_str(self.text(name)?);
+        self.out.push_str(": ");
+        self.out.push_str(&self.expr(ty)?);
+        self.out.push_str(" = ");
+        self.out.push_str(&self.expr(value)?);
+        self.out.push_str(";\n");
+        Ok(())
+    }
+
+    /// `struct Name { field: Type, ... }` (named fields) or `struct Name;`
+    /// (unit). Tuple structs are not supported yet (fail-closed).
+    fn struct_item(&mut self, node: Node, depth: usize) -> Result<(), Error> {
+        let name = self.field(node, "name")?;
+        self.indent(depth);
+        self.out.push_str("struct ");
+        self.out.push_str(self.text(name)?);
+        match node.child_by_field_name("body") {
+            None => self.out.push_str(";\n"),
+            Some(body) if body.kind() == "field_declaration_list" => {
+                self.out.push_str(" {\n");
+                let mut cursor = body.walk();
+                for f in body.named_children(&mut cursor) {
+                    if f.kind() != "field_declaration" {
+                        return Err(self.unsupported(f, "struct field"));
+                    }
+                    let fname = self.field(f, "name")?;
+                    let fty = self.field(f, "type")?;
+                    self.indent(depth + 1);
+                    self.out.push_str(self.text(fname)?);
+                    self.out.push_str(": ");
+                    self.out.push_str(&self.expr(fty)?);
+                    self.out.push_str(",\n");
+                }
+                self.indent(depth);
+                self.out.push_str("}\n");
+            }
+            Some(other) => return Err(self.unsupported(other, "struct body")),
+        }
+        Ok(())
+    }
+
+    /// `enum Name { Variant, ... }` (unit variants only in v1).
+    fn enum_item(&mut self, node: Node, depth: usize) -> Result<(), Error> {
+        let name = self.field(node, "name")?;
+        let body = self.field(node, "body")?;
+        self.indent(depth);
+        self.out.push_str("enum ");
+        self.out.push_str(self.text(name)?);
+        self.out.push_str(" {\n");
+        let mut cursor = body.walk();
+        for v in body.named_children(&mut cursor) {
+            if v.kind() != "enum_variant" {
+                return Err(self.unsupported(v, "enum variant"));
+            }
+            if v.child_by_field_name("body").is_some() {
+                return Err(self.unsupported(v, "enum variant with fields"));
+            }
+            let vname = self.field(v, "name")?;
+            self.indent(depth + 1);
+            self.out.push_str(self.text(vname)?);
+            self.out.push_str(",\n");
+        }
+        self.indent(depth);
+        self.out.push_str("}\n");
+        Ok(())
+    }
+
+    /// `impl Type { ... }` or `impl Trait for Type { ... }`. The body is a list
+    /// of functions (and comments), one blank line between them.
+    fn impl_item(&mut self, node: Node, depth: usize) -> Result<(), Error> {
+        let ty = self.field(node, "type")?;
+        let body = self.field(node, "body")?;
+        self.indent(depth);
+        self.out.push_str("impl ");
+        if let Some(tr) = node.child_by_field_name("trait") {
+            self.out.push_str(&self.expr(tr)?);
+            self.out.push_str(" for ");
+        }
+        self.out.push_str(&self.expr(ty)?);
+        self.out.push_str(" {\n");
+        let mut cursor = body.walk();
+        for (i, m) in body.named_children(&mut cursor).enumerate() {
+            if i > 0 {
+                self.out.push('\n');
+            }
+            match m.kind() {
+                "function_item" => self.function(m, depth + 1)?,
+                "line_comment" | "block_comment" => {
+                    self.indent(depth + 1);
+                    self.out.push_str(self.text(m)?);
+                    self.out.push('\n');
+                }
+                _ => return Err(self.unsupported(m, "impl item")),
+            }
+        }
+        self.indent(depth);
+        self.out.push_str("}\n");
+        Ok(())
     }
 
     fn function(&mut self, node: Node, depth: usize) -> Result<(), Error> {
@@ -214,17 +359,21 @@ impl<'a> Printer<'a> {
         self.out.push('(');
         let mut cursor = node.walk();
         for (i, param) in node.named_children(&mut cursor).enumerate() {
-            if param.kind() != "parameter" {
-                return Err(self.unsupported(param, "parameter"));
-            }
             if i > 0 {
                 self.out.push_str(", ");
             }
-            let pattern = self.field(param, "pattern")?;
-            let ty = self.field(param, "type")?;
-            self.out.push_str(self.text(pattern)?);
-            self.out.push_str(": ");
-            self.out.push_str(&self.expr(ty)?);
+            match param.kind() {
+                // `self`, `&self`, `&mut self` — reprint the receiver verbatim.
+                "self_parameter" => self.out.push_str(self.text(param)?),
+                "parameter" => {
+                    let pattern = self.field(param, "pattern")?;
+                    let ty = self.field(param, "type")?;
+                    self.out.push_str(self.text(pattern)?);
+                    self.out.push_str(": ");
+                    self.out.push_str(&self.expr(ty)?);
+                }
+                _ => return Err(self.unsupported(param, "parameter")),
+            }
         }
         self.out.push(')');
         Ok(())
@@ -323,6 +472,80 @@ impl<'a> Printer<'a> {
                     .ok_or_else(|| self.unsupported(node, "macro without token tree"))?;
                 Ok(format!("{}!{}", self.text(name)?, self.token_tree(tokens)?))
             }
+            // `a.b` field access.
+            "field_expression" => {
+                let value = self.field(node, "value")?;
+                let field = self.field(node, "field")?;
+                Ok(format!("{}.{}", self.expr(value)?, self.text(field)?))
+            }
+            // `Name { field: value, shorthand }` struct literal (single line).
+            "struct_expression" => {
+                let name = self.field(node, "name")?;
+                let body = self.field(node, "body")?;
+                let mut out = self.expr(name)?;
+                out.push_str(" {");
+                let mut cursor = body.walk();
+                let mut any = false;
+                for (i, init) in body.named_children(&mut cursor).enumerate() {
+                    out.push_str(if i == 0 { " " } else { ", " });
+                    any = true;
+                    match init.kind() {
+                        "field_initializer" => {
+                            let f = self.field(init, "field")?;
+                            let v = self.field(init, "value")?;
+                            out.push_str(self.text(f)?);
+                            out.push_str(": ");
+                            out.push_str(&self.expr(v)?);
+                        }
+                        "shorthand_field_initializer" => out.push_str(self.text(init)?),
+                        _ => return Err(self.unsupported(init, "struct field initializer")),
+                    }
+                }
+                out.push_str(if any { " }" } else { "}" });
+                Ok(out)
+            }
+            // `a::b::c` paths (value or type position).
+            "scoped_identifier" | "scoped_type_identifier" => {
+                let name = self.field(node, "name")?;
+                match node.child_by_field_name("path") {
+                    Some(path) => Ok(format!("{}::{}", self.expr(path)?, self.text(name)?)),
+                    None => Ok(format!("::{}", self.text(name)?)),
+                }
+            }
+            // `&T` / `&mut T`. Explicit lifetimes are not supported yet.
+            "reference_type" => {
+                let ty = self.field(node, "type")?;
+                let mut cursor = node.walk();
+                let mut is_mut = false;
+                for child in node.named_children(&mut cursor) {
+                    match child.kind() {
+                        "mutable_specifier" => is_mut = true,
+                        "lifetime" => return Err(self.unsupported(child, "reference lifetime")),
+                        _ => {}
+                    }
+                }
+                Ok(format!(
+                    "&{}{}",
+                    if is_mut { "mut " } else { "" },
+                    self.expr(ty)?
+                ))
+            }
+            // `Base<A, B>`.
+            "generic_type" => {
+                let base = self.field(node, "type")?;
+                let args = self.field(node, "type_arguments")?;
+                let mut out = self.expr(base)?;
+                out.push('<');
+                let mut cursor = args.walk();
+                for (i, a) in args.named_children(&mut cursor).enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&self.expr(a)?);
+                }
+                out.push('>');
+                Ok(out)
+            }
             _ => Err(self.unsupported(node, "expression")),
         }
     }
@@ -370,6 +593,12 @@ impl<'a> Printer<'a> {
 mod tests {
     use super::*;
 
+    /// Canonicalize a source string, panicking on error — for the happy-path
+    /// assertions below.
+    fn canon(s: &str) -> String {
+        String::from_utf8(canonicalize(s.as_bytes()).unwrap()).unwrap()
+    }
+
     const CANONICAL: &str = "fn add(a: i32, b: i32) -> i32 {\n    \
         // Simple addition\n    a + b\n}\n\n\
         fn main() {\n    \
@@ -406,9 +635,90 @@ mod tests {
 
     #[test]
     fn fails_closed_on_unsupported_constructs() {
-        // `struct` is outside the documented subset: error, never silent loss.
-        let err = canonicalize(b"struct S { x: i32 }\n").unwrap_err();
-        assert!(matches!(err, Error::Generation(_)));
+        // Still outside the documented subset (traits, tuple structs): error,
+        // never silent loss.
+        assert!(matches!(
+            canonicalize(b"trait T {}\n").unwrap_err(),
+            Error::Generation(_)
+        ));
+        assert!(matches!(
+            canonicalize(b"struct T(i32);\n").unwrap_err(),
+            Error::Generation(_)
+        ));
+    }
+
+    // --- Widened item coverage: use / const / struct / enum / impl ---
+
+    #[test]
+    fn canonicalizes_use_declarations() {
+        assert_eq!(canon("use   std::fmt ;"), "use std::fmt;\n");
+        assert_eq!(canon("use a::b::* ;"), "use a::b::*;\n");
+    }
+
+    #[test]
+    fn canonicalizes_const_and_static() {
+        assert_eq!(canon("const  MAX:i32=100;"), "const MAX: i32 = 100;\n");
+        assert_eq!(canon("static  S:i32=1;"), "static S: i32 = 1;\n");
+    }
+
+    #[test]
+    fn canonicalizes_structs() {
+        assert_eq!(
+            canon("struct  Point{x:i32,y:i32}"),
+            "struct Point {\n    x: i32,\n    y: i32,\n}\n"
+        );
+        assert_eq!(canon("struct Unit ;"), "struct Unit;\n");
+    }
+
+    #[test]
+    fn canonicalizes_enums() {
+        assert_eq!(
+            canon("enum Color{Red,Green,Blue}"),
+            "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
+        );
+    }
+
+    #[test]
+    fn canonicalizes_impl_blocks() {
+        assert_eq!(
+            canon("impl Point{fn sum(&self)->i32{self.x+self.y}}"),
+            "impl Point {\n    fn sum(&self) -> i32 {\n        self.x + self.y\n    }\n}\n"
+        );
+        // trait impl
+        assert_eq!(
+            canon("impl Default for P{fn d()->i32{0}}"),
+            "impl Default for P {\n    fn d() -> i32 {\n        0\n    }\n}\n"
+        );
+    }
+
+    #[test]
+    fn canonicalizes_references_generics_and_struct_literals() {
+        assert_eq!(
+            canon("fn f(v:&mut Vec<i32>)->i32{0}"),
+            "fn f(v: &mut Vec<i32>) -> i32 {\n    0\n}\n"
+        );
+        assert_eq!(
+            canon("fn g()->P{P{x:1,y:2}}"),
+            "fn g() -> P {\n    P { x: 1, y: 2 }\n}\n"
+        );
+    }
+
+    #[test]
+    fn module_with_mixed_items_converges_and_is_idempotent() {
+        let messy =
+            b"use std::fmt;\nstruct P{x:i32}\nenum E{A,B}\nimpl P{fn x(&self)->i32{self.x}}";
+        let tidy = b"use std::fmt;\n\nstruct P {\n    x: i32,\n}\n\nenum E {\n    A,\n    B,\n}\n\nimpl P {\n    fn x(&self) -> i32 {\n        self.x\n    }\n}\n";
+        let a = canonicalize(messy).unwrap();
+        assert_eq!(
+            canonicalize(tidy).unwrap(),
+            a,
+            "messy and tidy must converge"
+        );
+        assert_eq!(
+            canonicalize(&a).unwrap(),
+            a,
+            "module canonicalization must be idempotent"
+        );
     }
 
     // --- Determinism contract (see the module-level "Determinism" docs) ---

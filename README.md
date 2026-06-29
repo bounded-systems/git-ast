@@ -77,13 +77,17 @@ The core pipeline is implemented and runs through real Git:
 
 Honest boundaries:
 
-- **JSON is complete; Rust is a subset.** JSON canonicalization is total (any
-  valid JSON round-trips). The Rust pretty-printer covers the constructs in the
-  example (functions, params, blocks, `let`, binary/call/macro expressions,
-  literals, comments). Both are **fail-closed**: syntax errors reject the commit,
-  and any unsupported Rust construct returns an error rather than corrupting code.
-  Widening Rust coverage is additive — one more arm per node kind; adding a
-  language is one more arm in the filter's per-extension dispatch.
+- **JSON is complete; Rust is a (growing) subset.** JSON canonicalization is
+  total (any valid JSON round-trips). The Rust pretty-printer now covers
+  module-level items — `use`, `const`/`static`, named & unit `struct`s, unit-
+  variant `enum`s, `impl` blocks (incl. trait impls) — plus functions, `self`
+  receivers, references, generics, struct literals, field access, `let`,
+  binary/call/macro expressions, literals, and comments. Both languages are
+  **fail-closed**: syntax errors reject the commit, and any *unsupported* Rust
+  construct (tuple structs, traits, generic params, enum payloads, lifetimes, …)
+  returns an error rather than corrupting code. Widening Rust coverage is additive
+  — one more arm per node kind; adding a language is one more arm in the filter's
+  per-extension dispatch.
 - **Structural merge is JSON-only, and not yet Lean-proven.** The merge driver
   handles `*.json`; the Rust-language structural merge (over the Tree-sitter CST)
   and array element-level merging are later increments. The merge algorithm's
