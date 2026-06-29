@@ -68,6 +68,36 @@ Feature: git-ast canonical clean/smudge round-trip
     When I stage "notes.txt" containing "  spaced  text  "
     Then the stored blob for "notes.txt" is "  spaced  text  "
 
+  Scenario: A Rust module of items round-trips canonically
+    When I stage "lib.rs" containing:
+      """
+      use std::fmt;
+      struct P{x:i32}
+      enum E{A,B}
+      impl P{fn x(&self)->i32{self.x}}
+      """
+    And I commit
+    And I check out "lib.rs" fresh
+    Then the working file "lib.rs" is:
+      """
+      use std::fmt;
+
+      struct P {
+          x: i32,
+      }
+
+      enum E {
+          A,
+          B,
+      }
+
+      impl P {
+          fn x(&self) -> i32 {
+              self.x
+          }
+      }
+      """
+
   Scenario: JSON reformatting never reaches history
     When I stage "config.json" containing:
       """
