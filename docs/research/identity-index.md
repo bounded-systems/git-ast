@@ -56,6 +56,45 @@ concrete as a data structure.
 - **The deep/transitive hash for free** — a trie node's hash *is* its deep content,
   which is exactly what `ci-attestation.md` showed semantic checks need to be sound.
 
+## Finding repeats and near-clones
+
+"Where does this pattern recur?" splits into two mechanisms — and the index supplies
+the input to both.
+
+**Exact (and alpha-equivalent) repeats — free.** The index *is* a clone detector:
+- any `subtree_hash` whose `occurrences` count is **> 1** is a repeated pattern, across
+  files and history, in one pass — **Type-1 clones** (exact modulo formatting);
+- key by the **alpha-normalized** hash and you also catch copies that differ only by
+  variable names — **Type-2 clones**;
+- sort subtree hashes by frequency and the high-count non-trivial subtrees *are* the
+  repeated **idioms** (frequency mining for free from the occurrence counts).
+
+All of that is *by construction, O(n), zero heuristics.*
+
+**Similar-but-not-identical (Type-3 near-clones) — scalable, not exact.** Similarity
+can't be a hash lookup, and naive pairwise comparison is O(n²). The standard escape is
+**MinHash + LSH**, and git-ast already holds the right input:
+
+1. **Each node's `subtree_hashes` multiset is a bag of structural shingles** — exactly
+   the MinHash input.
+2. **MinHash** → a small signature whose overlap approximates the Dice/Jaccard
+   similarity of the multisets.
+3. **LSH-bucket** the signatures so similar nodes collide → candidate pairs in ~O(n)
+   instead of O(n²).
+4. **Verify** each candidate with the exact `structural_dice` already built, above a
+   threshold → confirmed near-clones.
+
+This is the architecture of the scalable clone detectors — Deckard (LSH over AST
+characteristic vectors), SourcererCC (token-bag + inverted index for Type-3 at scale).
+
+**The trie does double duty:** it resolves exact/alpha classes so they never reach the
+fuzzy layer (dedup the input), *and* its leaves supply the shingles MinHash consumes.
+So: **trie → exact + alpha repeats for free; MinHash/LSH over the leaves → similar
+repeats, scalably.** LSH makes similarity *scalable*, not *exact* — recall is tuned by
+the LSH band/row geometry and the final threshold is still a judgment call (the same
+NP-hard remainder), but the heuristic now sees a tiny pre-filtered candidate set
+instead of the whole corpus.
+
 ## The honest boundary: exact + alpha for free, fuzzy stays heuristic
 
 A Merkle trie gives **exact and alpha-equivalence classes by construction**. It does
