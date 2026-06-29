@@ -18,6 +18,7 @@ use tempfile::TempDir;
 struct AstWorld {
     repo: Option<TempDir>,
     last_add_code: i32,
+    last_merge_code: i32,
 }
 
 impl AstWorld {
@@ -64,12 +65,23 @@ async fn install(world: &mut AstWorld) {
     run(&["init", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
     run(&["config", "user.name", "git-ast test"]);
-    let process = format!("{} filter-process", env!("CARGO_BIN_EXE_git-ast"));
-    run(&["config", "filter.git-ast.process", &process]);
+    let bin = env!("CARGO_BIN_EXE_git-ast");
+    run(&[
+        "config",
+        "filter.git-ast.process",
+        &format!("{bin} filter-process"),
+    ]);
     run(&["config", "filter.git-ast.required", "true"]);
+    // Structural merge driver (JSON).
+    run(&["config", "merge.git-ast.name", "git-ast structural merge"]);
+    run(&[
+        "config",
+        "merge.git-ast.driver",
+        &format!("{bin} merge-driver %O %A %B %L %P"),
+    ]);
     std::fs::write(
         dir.join(".gitattributes"),
-        "*.rs filter=git-ast\n*.json filter=git-ast\n",
+        "*.rs filter=git-ast\n*.json filter=git-ast\n*.json merge=git-ast\n",
     )
     .expect("write attrs");
     world.repo = Some(repo);
@@ -141,6 +153,34 @@ async fn staging_rejected(world: &mut AstWorld, name: String, content: String) {
     world.write(&name, &content);
     let (code, _) = world.git(&["add", &name]);
     assert_ne!(code, 0, "expected `git add {name}` to fail (fail-closed)");
+}
+
+#[when(expr = "I branch {string}")]
+async fn branch(world: &mut AstWorld, name: String) {
+    world.git(&["checkout", "-q", "-b", &name]);
+}
+
+#[when("I check out the original branch")]
+async fn checkout_previous(world: &mut AstWorld) {
+    // `-` returns to the previously checked-out branch — avoids hard-coding
+    // whether `git init` produced `main` or `master`.
+    world.git(&["checkout", "-q", "-"]);
+}
+
+#[when(expr = "I merge {string}")]
+async fn merge_branch(world: &mut AstWorld, name: String) {
+    let (code, _) = world.git(&["merge", "--no-edit", &name]);
+    world.last_merge_code = code;
+}
+
+#[then("the merge succeeds")]
+async fn merge_succeeds(world: &mut AstWorld) {
+    assert_eq!(world.last_merge_code, 0, "expected a clean merge");
+}
+
+#[then("the merge conflicts")]
+async fn merge_conflicts(world: &mut AstWorld) {
+    assert_ne!(world.last_merge_code, 0, "expected a merge conflict");
 }
 
 #[tokio::main]

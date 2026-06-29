@@ -1,0 +1,37 @@
+[
+  {
+    "name": "no_change",
+    "base": { "a": 1 }, "ours": { "a": 1 }, "theirs": { "a": 1 },
+    "expect": { "clean": { "a": 1 } }
+  },
+  {
+    "name": "only_ours",
+    "base": { "a": 1 }, "ours": { "a": 2 }, "theirs": { "a": 1 },
+    "expect": { "clean": { "a": 2 } }
+  },
+  {
+    "name": "only_theirs",
+    "base": { "a": 1 }, "ours": { "a": 1 }, "theirs": { "a": 9 },
+    "expect": { "clean": { "a": 9 } }
+  },
+  {
+    "name": "different_keys",
+    "base": { "a": 1, "b": 1 }, "ours": { "a": 2, "b": 1 }, "theirs": { "a": 1, "b": 3 },
+    "expect": { "clean": { "a": 2, "b": 3 } }
+  },
+  {
+    "name": "same_key_conflict",
+    "base": { "a": 1 }, "ours": { "a": 2 }, "theirs": { "a": 3 },
+    "expect": { "conflict": true }
+  },
+  {
+    "name": "add_distinct_keys",
+    "base": {}, "ours": { "a": 1 }, "theirs": { "b": 2 },
+    "expect": { "clean": { "a": 1, "b": 2 } }
+  },
+  {
+    "name": "nested_different_subkeys",
+    "base": { "o": { "x": 1, "y": 1 } }, "ours": { "o": { "x": 2, "y": 1 } }, "theirs": { "o": { "x": 1, "y": 3 } },
+    "expect": { "clean": { "o": { "x": 2, "y": 3 } } }
+  }
+]

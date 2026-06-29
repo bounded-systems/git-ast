@@ -67,6 +67,13 @@ The core pipeline is implemented and runs through real Git:
 - `git-ast inspect [FILE]` lists top-level definitions with a
   **formatting-invariant content hash** — a proof-of-concept of the first
   read verb (see "The interface: verbs" below).
+- **Structural 3-way merge for JSON.** `git-ast setup` also wires a real merge
+  driver ([`src/merge.rs`](./src/merge.rs)): on `git merge`, JSON is merged by
+  **structure** — edits and additions to *different* object keys merge cleanly
+  even when they touch adjacent lines (where a text merge would conflict); only a
+  genuine same-key divergence conflicts. Proven against real `git merge` by the
+  cucumber claims suite. (A machine-checked **Lean** proof of the merge's
+  soundness is the immediate follow-up — see boundaries below.)
 
 Honest boundaries:
 
@@ -77,11 +84,15 @@ Honest boundaries:
   and any unsupported Rust construct returns an error rather than corrupting code.
   Widening Rust coverage is additive — one more arm per node kind; adding a
   language is one more arm in the filter's per-extension dispatch.
-- **Diff and merge drivers are still placeholders.** Making those *structural*
-  depends on the hardest open problem — **stable AST node identity across
-  versions** — which this does **not** solve. Canonical formatting removes
-  formatting churn from history; it does not yet track a node through a move or
-  rename. That problem is described in
+- **Structural merge is JSON-only, and not yet Lean-proven.** The merge driver
+  handles `*.json`; the Rust-language structural merge (over the Tree-sitter CST)
+  and array element-level merging are later increments. The merge algorithm's
+  soundness is exercised by Rust property tests now; a Lean proof (the formal
+  half of "backed by Rust *and* Lean") lands next.
+- **The diff driver is still a placeholder, and merge does not track node
+  identity.** Structural *diff*, and tracking a node through a move or
+  rename, depend on the hardest open problem — **stable AST node identity across
+  versions** — which this does **not** solve. That problem is described in
   [`docs/planning/scope.md`](./docs/planning/scope.md) and remains out of scope.
 
 ## On stable node identity (the hard part)
