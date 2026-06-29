@@ -1,0 +1,43 @@
+src/identity.rs
+  s_3afa8ea03cb772::t_104a1fba2c0578 551-562,570-571,579-586,591-609,611
+  s_3afa8ea03cb772::t_00073b0e1e6b57 23
+  s_3afa8ea03cb772::t_30b7af98ffab46 317,563-569,572-578,587-590,610
+  s_3afa8ea03cb772::t_63dc4b1e104c83 187-268,272-316,318-356
+src/main.rs
+  s_3afa8ea03cb772::t_53c4bfbd2dace7 68-70,72-76,78,81-101,105-112
+  s_c4318117f42b02::t_c70a1a89adc2c7 113-114
+tests/identity_cli.rs
+  s_3afa8ea03cb772::t_30b7af98ffab46 64-73
+  s_3afa8ea03cb772::t_88b33349e13cd8 57-63,74-88
+README.md
+  s_3afa8ea03cb772::t_cfb3e09a154ec8 78-82
+  s_3afa8ea03cb772::t_14b75913753b0a 115-126
+src/printer.rs
+  s_3afa8ea03cb772::t_819fe3509835f7 182-185,191
+  s_3afa8ea03cb772::t_f96b25173f6495 201-227,231-249
+  s_3afa8ea03cb772::t_30b7af98ffab46 228-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9ea58407d86e1d7c74163fb87aa2de9b9c072530",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    },
+    "s_c4318117f42b02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b707ec58-424b-452d-b628-e6eb4bd39018",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
