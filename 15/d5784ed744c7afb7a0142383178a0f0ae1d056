@@ -1,0 +1,26 @@
+src/clones.rs
+  s_a96a0778896457::t_f98545d0aa9ffd 1-215
+src/main.rs
+  s_a96a0778896457::t_69077339e4cbf2 24
+  s_a96a0778896457::t_b319faf3f4255e 10
+  s_a96a0778896457::t_b3070d89c13379 203
+  s_a96a0778896457::t_dec9c1ec751538 120-165
+src/lib.rs
+  s_a96a0778896457::t_69e4711356626f 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "15d5784ed744c7afb7a0142383178a0f0ae1d056",
+  "prompts": {},
+  "sessions": {
+    "s_a96a0778896457": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5017cc0b-421b-4314-b3a8-5ea45503231a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
