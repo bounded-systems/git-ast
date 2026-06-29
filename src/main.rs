@@ -74,13 +74,13 @@ fn print_help() {
          setup             Enable the *.rs and *.json clean/smudge filter here\n    \
          inspect [FILE]    List top-level defs with a formatting-invariant hash\n    \
          filter-process    Clean/smudge long-running filter (Rust + JSON)\n    \
-         diff-driver       Git diff driver (placeholder)\n    \
-         merge-driver      Git merge driver (placeholder)\n    \
+         diff-driver       Structural diff (JSON); text diff otherwise\n    \
+         merge-driver      Structural 3-way merge (JSON)\n    \
          --version, -V     Print version\n    \
          --help, -h        Print this help\n\
          \n\
          The clean/smudge round-trip canonicalizes JSON and a documented Rust\n\
-         subset, and is fail-closed outside it. Structural diff/merge await stable\n\
-         node identity; see docs/ for the design and scope."
+         subset; structural merge & diff are real for JSON. Refactor-aware history\n\
+         (node identity) is the remaining frontier; see docs/ for the design."
     );
 }

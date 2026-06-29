@@ -28,6 +28,7 @@
 //! Configuration is read via [`config`].
 
 pub mod config;
+pub mod diff;
 pub mod drivers;
 pub mod filters;
 pub mod json;

@@ -79,9 +79,15 @@ async fn install(world: &mut AstWorld) {
         "merge.git-ast.driver",
         &format!("{bin} merge-driver %O %A %B %L %P"),
     ]);
+    // Structural diff driver (JSON).
+    run(&[
+        "config",
+        "diff.git-ast.command",
+        &format!("{bin} diff-driver"),
+    ]);
     std::fs::write(
         dir.join(".gitattributes"),
-        "*.rs filter=git-ast\n*.json filter=git-ast\n*.json merge=git-ast\n",
+        "*.rs filter=git-ast\n*.json filter=git-ast\n*.json merge=git-ast\n*.json diff=git-ast\n",
     )
     .expect("write attrs");
     world.repo = Some(repo);
@@ -181,6 +187,15 @@ async fn merge_succeeds(world: &mut AstWorld) {
 #[then("the merge conflicts")]
 async fn merge_conflicts(world: &mut AstWorld) {
     assert_ne!(world.last_merge_code, 0, "expected a merge conflict");
+}
+
+#[then(expr = "the diff of {string} contains {string}")]
+async fn diff_contains(world: &mut AstWorld, name: String, needle: String) {
+    let (_, out) = world.git(&["diff", "--", &name]);
+    assert!(
+        out.contains(&needle),
+        "expected diff of {name} to contain `{needle}`, got:\n{out}"
+    );
 }
 
 #[tokio::main]

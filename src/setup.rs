@@ -18,6 +18,7 @@ const ATTR_LINES: &[&str] = &[
     "*.rs filter=git-ast",
     "*.json filter=git-ast",
     "*.json merge=git-ast",
+    "*.json diff=git-ast",
 ];
 
 /// Configure the current repository to use git-ast for the supported languages.
@@ -40,9 +41,12 @@ pub fn run() -> Result<(), Error> {
         &format!("{exe} merge-driver %O %A %B %L %P"),
     )?;
 
+    // Structural diff driver (JSON). Git appends the GIT_EXTERNAL_DIFF args.
+    git_config("diff.git-ast.command", &format!("{exe} diff-driver"))?;
+
     ensure_attributes()?;
 
-    eprintln!("git-ast: configured filter (*.rs, *.json) + structural merge (*.json).");
+    eprintln!("git-ast: configured filter (*.rs, *.json) + structural merge & diff (*.json).");
     eprintln!("git-ast: re-add existing files to canonicalize them: git add --renormalize .");
     Ok(())
 }
