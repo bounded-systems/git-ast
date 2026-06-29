@@ -70,12 +70,12 @@ pub fn match_defs(old: &[Def], new: &[Def]) -> Vec<Correspondence> {
             });
         }
     }
-    // Pass 2: same name, different body → Modified.
+    // Pass 2: same kind and name, different body → Modified.
     for (oi, o) in old.iter().enumerate() {
         if old_used[oi] {
             continue;
         }
-        if let Some(ni) = first_new(&new_used, &|n| n.name == o.name) {
+        if let Some(ni) = first_new(&new_used, &|n| n.kind == o.kind && n.name == o.name) {
             old_used[oi] = true;
             new_used[ni] = true;
             out.push(Correspondence::Modified {
@@ -608,5 +608,29 @@ mod tests {
         );
         // No spurious insert/delete: a pure reorder is only moves.
         assert!(ops.iter().all(|op| matches!(op, EditOp::Moved { .. })));
+    }
+
+    // --- Non-fn items ---
+
+    #[test]
+    fn matches_structs_enums_and_consts() {
+        let cs = matched(
+            "struct Point { x: i32 }\nenum E { A }\nconst C: i32 = 1;",
+            "struct Coord { x: i32 }\nenum E { A, B }\nconst C: i32 = 2;",
+        );
+        assert!(cs.contains(&Correspondence::Renamed {
+            from: "Point".into(),
+            to: "Coord".into()
+        }));
+        assert!(cs.contains(&Correspondence::Modified { name: "E".into() }));
+        assert!(cs.contains(&Correspondence::Modified { name: "C".into() }));
+    }
+
+    #[test]
+    fn same_name_different_kind_does_not_cross_match() {
+        // A struct and a function that happen to share a name are distinct items.
+        let cs = matched("struct Foo { x: i32 }", "fn Foo() -> i32 { 1 }");
+        assert!(cs.contains(&Correspondence::Removed { name: "Foo".into() }));
+        assert!(cs.contains(&Correspondence::Added { name: "Foo".into() }));
     }
 }
