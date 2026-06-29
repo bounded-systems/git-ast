@@ -7,7 +7,7 @@
 use std::io::Read;
 use std::process::ExitCode;
 
-use git_ast::{drivers, filters, identity, printer, setup, Error};
+use git_ast::{blame, drivers, filters, identity, printer, setup, Error};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -20,6 +20,7 @@ fn main() -> ExitCode {
         "setup" => setup::run().map(|()| 0u8),
         "inspect" => run_inspect(rest),
         "match" => run_match(rest),
+        "blame" => run_blame(rest),
         "filter-process" => filters::run_long_running_filter().map(|()| 0u8),
         "diff-driver" => drivers::run_diff_driver(rest).map(|()| 0u8),
         "merge-driver" => drivers::run_merge_driver(rest).map(|()| 0u8),
@@ -102,6 +103,21 @@ fn run_match(args: &[String]) -> Result<u8, Error> {
     Ok(0)
 }
 
+/// The `blame` verb: refactor-aware, per-definition blame
+/// (`git-ast blame <file>`). For each top-level item, prints the commit that last
+/// changed it — following it through renames.
+fn run_blame(args: &[String]) -> Result<u8, Error> {
+    let Some(file) = args.first() else {
+        return Err(Error::Config(
+            "blame expects a file: git-ast blame <file>".to_string(),
+        ));
+    };
+    for b in blame::blame(file)? {
+        println!("{}  {:<6} {}", b.commit, b.kind, b.name);
+    }
+    Ok(0)
+}
+
 /// The (old, new) function names for a correspondence that changed a body, or
 /// `None` for unchanged/renamed-only/added/removed.
 fn changed_fn_names(c: &identity::Correspondence) -> Option<(&str, &str)> {
@@ -123,6 +139,7 @@ fn print_help() {
          setup             Enable the *.rs and *.json clean/smudge filter here\n    \
          inspect [FILE]    List top-level defs with a formatting-invariant hash\n    \
          match OLD NEW     Correspond defs across two versions (rename/move/edit)\n    \
+         blame FILE        Per-def blame, following items through renames\n    \
          filter-process    Clean/smudge long-running filter (Rust + JSON)\n    \
          diff-driver       Structural diff (JSON); text diff otherwise\n    \
          merge-driver      Structural 3-way merge (JSON)\n    \
