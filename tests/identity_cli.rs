@@ -28,9 +28,17 @@ fn run_match(old: &str, new: &str) -> String {
 }
 
 #[test]
-fn match_verb_tracks_rename_modify_add_remove() {
-    let old = "fn keep()->i32{1}\nfn edit()->i32{2}\nfn renameMe()->i32{3}\nfn drop()->i32{4}";
-    let new = "fn keep()->i32{1}\nfn edit()->i32{99}\nfn renamed()->i32{3}\nfn fresh()->i32{5}";
+fn match_verb_tracks_all_correspondences() {
+    let old = "fn keep()->i32{1}\n\
+               fn edit()->i32{2}\n\
+               fn renameMe(x: i32)->i32{x+1}\n\
+               fn parseConfig(s: i32)->i32{let v = s + 1; v * 2}\n\
+               fn gone()->i32{4}";
+    let new = "fn keep()->i32{1}\n\
+               fn edit()->i32{99}\n\
+               fn renamed(x: i32)->i32{x+1}\n\
+               fn loadSettings(s: i32)->i32{let v = s + 1; v * 3}\n\
+               fn fresh(a: i32, b: i32)->i32{let p = a + b; helper(p)}";
     let out = run_match(old, new);
     assert!(out.contains("unchanged  keep"), "got:\n{out}");
     assert!(out.contains("modified   edit"), "got:\n{out}");
@@ -38,6 +46,11 @@ fn match_verb_tracks_rename_modify_add_remove() {
         out.contains("renamed    renameMe -> renamed"),
         "got:\n{out}"
     );
-    assert!(out.contains("removed    drop"), "got:\n{out}");
+    // Fuzzy: renamed AND edited.
+    assert!(
+        out.contains("renamed+   parseConfig -> loadSettings"),
+        "got:\n{out}"
+    );
+    assert!(out.contains("removed    gone"), "got:\n{out}");
     assert!(out.contains("added      fresh"), "got:\n{out}");
 }
