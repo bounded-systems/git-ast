@@ -144,6 +144,11 @@ Honest boundaries:
 
 ## On stable node identity (the hard part)
 
+> A verified literature survey of the **construct / compute / resolve** strategies
+> (Unison, GumTree, Kythe/stack-graphs, the CRDT and alpha-equivalence-hashing
+> results) and what git-ast should borrow next is in
+> [`docs/research/node-identity.md`](./docs/research/node-identity.md).
+
 "Node identity across versions" means being able to say *this* function in
 commit N is the same entity as *that* one in commit N+1 — through a move, a
 rename, an extract-method — so attribution follows the node, not its line
