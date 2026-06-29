@@ -1,0 +1,21 @@
+README.md
+  s_3afa8ea03cb772::t_5a874ea2346291 147-151
+docs/research/node-identity.md
+  s_3afa8ea03cb772::t_caea17d49eccf0 1-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "6bb4c2d2cfae253f1c4d82b9b16fd7c30f9fcf70",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
