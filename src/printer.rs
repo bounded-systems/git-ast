@@ -66,7 +66,7 @@ pub fn canonicalize(source: &[u8]) -> Result<Vec<u8>, Error> {
 fn parse(source: &[u8]) -> Result<tree_sitter::Tree, Error> {
     let mut parser = Parser::new();
     parser
-        .set_language(&tree_sitter_rust::language())
+        .set_language(&tree_sitter_rust::LANGUAGE.into())
         .map_err(|e| Error::Parsing(format!("loading Rust grammar: {e}")))?;
     let tree = parser
         .parse(source, None)
