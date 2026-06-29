@@ -1,0 +1,19 @@
+docs/research/storage-model.md
+  s_3afa8ea03cb772::t_93f69022327373 1-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "3d9b2743ca0a55e6759209b194b2658b13ae37f2",
+  "prompts": {},
+  "sessions": {
+    "s_3afa8ea03cb772": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e8b57ee-3d61-44b0-b33b-c3f276b478fa",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}
