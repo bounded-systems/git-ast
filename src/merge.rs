@@ -20,11 +20,11 @@
 //!   otherwise                   -> Conflict         (divergent scalars/arrays/types)
 //! ```
 //!
-//! The algorithm's soundness properties (idempotence, only-one-side, symmetry)
-//! are exercised as Rust property tests in `tests/merge.rs`. A machine-checked
-//! **Lean** proof of the same properties — the formal half of "backed by Rust
-//! *and* Lean" — is the immediate follow-up; the conformance vectors in
-//! `tests/merge_vectors.json` are written to be the shared spec both will run.
+//! The algorithm's soundness properties (idempotence, only-one-side) are
+//! exercised as Rust property tests in `tests/merge.rs` **and** machine-checked
+//! in Lean — see `proofs/JsonMerge.lean` (the formal half of "backed by Rust
+//! *and* Lean"). The conformance vectors in `tests/merge_vectors.json` are the
+//! shared spec: Rust executes them, Lean `decide`s them.
 //!
 //! Boundary (v1): arrays are compared whole — a both-sides-changed array is a
 //! conflict (no element-level LCS yet).

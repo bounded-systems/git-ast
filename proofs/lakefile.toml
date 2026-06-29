@@ -1,0 +1,5 @@
+name = "git_ast_proofs"
+defaultTargets = ["JsonMerge"]
+
+[[lean_lib]]
+name = "JsonMerge"

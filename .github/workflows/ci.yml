@@ -24,3 +24,22 @@ jobs:
         run: cargo test --verbose
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+
+  proofs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Lean (elan)
+        run: |
+          curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build proofs
+        working-directory: proofs
+        run: lake build
+      - name: Assert proofs are sorry-free
+        working-directory: proofs
+        run: |
+          lake env lean JsonMerge.lean | tee axioms.txt
+          if grep -q sorryAx axioms.txt; then
+            echo "::error::Lean proof depends on sorry"; exit 1
+          fi
